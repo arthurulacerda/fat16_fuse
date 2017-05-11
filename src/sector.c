@@ -3,8 +3,11 @@
 
 #include "sector.h"
 
+#define BYTES_PER_SECTOR 512
+
 /* Read the sector 'secnum' from the image to the buffer */
 void sector_read(FILE *fd, unsigned int secnum, void *buffer)
 {
-  // your code here
+	fseek(fd,BYTES_PER_SECTOR*secnum,SEEK_SET);
+  	fread(buffer, BYTES_PER_SECTOR, 1, fd);
 }
