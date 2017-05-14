@@ -2,3 +2,4 @@
 *.img
 mount_fat16
 a.out
+out
