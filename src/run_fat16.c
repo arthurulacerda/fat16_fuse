@@ -19,7 +19,7 @@ typedef struct {
   WORD BPB_RootEntCnt;
   WORD BPB_TotSec16;
   BYTE BPB_Media;
-  WORD BPB_FatSz16;
+  WORD BPB_FATSz16;
   WORD BPB_SecPerTrk;
   WORD BPB_NumHeads;
   DWORD BPB_HiddSec;
@@ -49,10 +49,12 @@ typedef struct {
   DWORD DIR_FileSize;
 } __attribute__ ((packed)) DIR_ENTRY;
 
-/** Reads the first 512 bytes of the image, that represents the BPB;
-* @param Bpb: Pointer to the Bpb struct that will store all the information.
-* @param fd: File descriptor to read the Bpb sector.
-*/
+typedef struct {
+  BPB_BS Bpb;
+  DWORD FirstRootDirSecNum;
+  DWORD FirstDataSector;
+  BYTE *Fat;
+} VOLUME;
 
 void printBPB(BPB_BS *Bpb, FILE *out) {
   int i;
@@ -97,6 +99,15 @@ void printDIR(DIR_ENTRY *Dir, FILE *out) {
 
 }*/
 
+WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY *Dir, WORD ClusterN) {
+  WORD FatBuffer[BYTES_PER_SECTOR];
+  WORD FATOffset = ClusterN * 2;
+  WORD FatSecNum = Vol->Bpb.BPB_RsvdSecCnt + (FATOffset / Vol->Bpb.BPB_BytsPerSec);
+  WORD FatEntOffset = FATOffset % Vol->Bpb.BPB_BytsPerSec;
+  sector_read(fd, FatSecNum, &FatBuffer);
+  return *((WORD *) &FatBuffer[FatEntOffset]);
+}
+
 int main(int argc, char **argv) {
   if (argv[1] == NULL) {
     printf("Missing FAT16 image file!\n");
@@ -105,54 +116,67 @@ int main(int argc, char **argv) {
   FILE *fd = fopen(argv[1], "rb");
   FILE *out = fopen("out", "w");
   BYTE buffer[BYTES_PER_SECTOR];
-
-  /* BPB */
-  BPB_BS Bpb;
+  VOLUME Fat16;
+  VOLUME *Vol = &Fat16;
 
   /* Reading BPB */
-  sector_read(fd, 0, &Bpb);
-  printBPB(&Bpb, out);
+  sector_read(fd, 0, &Vol->Bpb);
+  printBPB(&Vol->Bpb, out);
 
   /* Root directory */
-  DIR_ENTRY *Root = calloc(Bpb.BPB_RootEntCnt, sizeof *Root);
+  DIR_ENTRY *Root = calloc(Vol->Bpb.BPB_RootEntCnt, sizeof *Root);
   if (!Root) exit(1);
 
   /* First sector of the root directory */
-  unsigned int FirstRootDirSecNum = Bpb.BPB_RsvdSecCnt + (Bpb.BPB_FatSz16 * Bpb.BPB_NumFATS);
+  Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 *
+      Vol->Bpb.BPB_NumFATS);
 
   /* Reading root directory */
   int RootDirCnt = 1, i;
-  sector_read(fd, FirstRootDirSecNum, &buffer);
+  sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
   memcpy(&Root[0], buffer, 32);
-  for (i = 1; i < Bpb.BPB_RootEntCnt && Root[i - 1].DIR_Name[0] != 0x00; i++) {
+  for (i = 1; i < Vol->Bpb.BPB_RootEntCnt && Root[i - 1].DIR_Name[0] != 0x00; i++) {
     printDIR(&Root[i - 1], out);
     memcpy(&Root[i], &buffer[i * 32], 32);
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
      * Read next sector */
     if (i % 16 == 0) {
-      sector_read(fd, FirstRootDirSecNum + RootDirCnt, &buffer);
+      sector_read(fd, Vol->FirstRootDirSecNum + RootDirCnt, &buffer);
       RootDirCnt++;
     }
   }
   //readFileFAT(fd,&root,root.DIR_FstClusHI);
 
-  /* First sector of the Data Region */
-  WORD RootDirSectors = ((Bpb.BPB_RootEntCnt * 32) + (Bpb.BPB_BytsPerSec - 1)) / Bpb.BPB_BytsPerSec;
 
   /* Number of FAT entries */
 
   /* FAT */
-  WORD *Fat = calloc(Bpb.BPB_FatSz16, sizeof *Fat);
-  if (!Fat) exit(2);
+  //WORD *Fat = calloc(Bpb.BPB_FATSz16, sizeof *Fat);
+  //if (!Fat) exit(2);
 
-  unsigned int ClusterN = Root[0].DIR_FstClusLO;
-  unsigned int FATOffset = ClusterN * 2;
-  unsigned int FatSecNum = Bpb.BPB_RsvdSecCnt + (FATOffset / BYTES_PER_SECTOR);
-  unsigned int FatEntOffset = FATOffset % BYTES_PER_SECTOR;
-  sector_read(fd, FatSecNum, &buffer);
-  WORD FatClusEntryVal = *((WORD *) &buffer[FatEntOffset]);
-  printf("%d\n", FatClusEntryVal);
+  /* Determination of FAT entry for a cluster */
+  WORD ClusterN = Root[0].DIR_FstClusLO;
+  WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, &Root[0], ClusterN);
 
+  /* Number of sectors in the root directory */
+  WORD RootDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
+      (Vol->Bpb.BPB_BytsPerSec - 1)) / Vol->Bpb.BPB_BytsPerSec;
+
+  /* First sector of the data region (cluster #2) */
+  Vol->FirstDataSector = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_NumFATS *
+      Vol->Bpb.BPB_FATSz16) + RootDirSectors;
+
+  /* First sector of any valid cluster */
+  WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
+
+  DIR_ENTRY Dir;
+  sector_read(fd, FirstSectorofCluster, &buffer);
+  memcpy(&Dir, &buffer[96], 32);
+  printDIR(&Dir, out);
+
+
+  //sector_read(fd, 4, &FatBuffer);
+  //printf("%d\n", FatBuffer[2]);
   return 0;
 }
