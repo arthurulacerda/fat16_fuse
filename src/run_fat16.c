@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -30,7 +29,7 @@ typedef struct {
   DWORD BS_VollID;
   BYTE BS_VollLab[11];
   BYTE BS_FilSysType[8];
-  BYTE Hex1[448];
+  BYTE Reserved[448];
   WORD Signature_word;
 } __attribute__ ((packed)) BPB_BS;
 
@@ -99,7 +98,16 @@ void printDIR(DIR_ENTRY *Dir, FILE *out) {
 
 }*/
 
-WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY *Dir, WORD ClusterN) {
+void *emalloc(size_t size) {
+  void *p = malloc(size);
+  if (!p) {
+    fprintf(stderr, "Out of memory!\n");
+    exit(EXIT_FAILURE);
+  }
+  return p;
+}
+
+WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
   WORD FatBuffer[BYTES_PER_SECTOR];
   WORD FATOffset = ClusterN * 2;
   WORD FatSecNum = Vol->Bpb.BPB_RsvdSecCnt + (FATOffset / Vol->Bpb.BPB_BytsPerSec);
@@ -120,7 +128,7 @@ char** path_treatment(char* path_entry, int* pathsz){
       path_size++;
   }
 
-  char** path = (char**) malloc (path_size*sizeof(char*));
+  char** path = (char**) emalloc (path_size*sizeof(char*));
 
   // Dividing path names in separated file names
   const char token[2] = "/";
@@ -175,14 +183,20 @@ int main(int argc, char **argv) {
     exit(0);
   }
 
-  /* Open Fat16 Image */
+  /* Open FAT16 image file */
   FILE *fd = fopen(argv[1], "rb");
 
-  /* Open Output file */
+  /* Open output file */
   FILE *out = fopen("out", "w");
 
   int path_size;
-  char **path = path_treatment(argv[2],&path_size);
+  char **path = path_treatment(argv[2], &path_size);
+  //int i1, j1;
+  //for (i1 = 0; i1 < 2; i1++) {
+  //  for (j1 = 0; j1 < path[i1][j1] != '\0'; j1++) {
+  //    printf("%c", path[i1][j1]);
+  //  }
+  //}
 
   BYTE buffer[BYTES_PER_SECTOR];
   VOLUME Fat16;
@@ -193,35 +207,45 @@ int main(int argc, char **argv) {
   printBPB(&Vol->Bpb, out);
 
   /* Root directory */
-  DIR_ENTRY *Root = calloc(Vol->Bpb.BPB_RootEntCnt, sizeof *Root);
-  if (!Root) exit(1);
+  DIR_ENTRY Root;
 
   /* First sector of the root directory */
   Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 *
       Vol->Bpb.BPB_NumFATS);
 
-  /* Searching first File on root directory */
-  int RootDirCnt = 1, i, j, flag = 1,firstPathFile;
+  /* Searching for the file/directory in the root directory */
+  int RootDirCnt = 1, i = 1, j, flag = 1, firstPathFile;
   sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
-  memcpy(&Root[0], buffer, 32);
-  for (i = 1; i < Vol->Bpb.BPB_RootEntCnt && Root[i - 1].DIR_Name[0] != 0x00; i++) {
-    
-    printDIR(&Root[i - 1], out);
-    
+  for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
+    memcpy(&Root, &buffer[(i - 1) * 32], 32);
+
+    if (Root.DIR_Name[0] == 0x00) {
+      break;
+    }
+
+    printDIR(&Root, out);
+
     // Comparing strings
     flag = 1;
-    for(j=0;path[0][j]!='\0';j++){
-      if(Root[i-1].DIR_Name[j] != path[0][j]){
+    for (j = 0; Root.DIR_Name[j] != '\0'; j++) {
+      printf("%c - %c\n", Root.DIR_Name[j], path[0][j]);
+      if (Root.DIR_Name[j] != path[0][j]) {
         flag = 0;
         break;
       }
     }
 
-    // Verifying if the name ended
-    if(flag == 1 && !(Root[i-1].DIR_Name[j] >= 33 && Root[i-1].DIR_Name[j] <= 126)){
-      firstPathFile = i-1;
+    // If the file is an ATTR_ARCHIVE, we stop here
+    if (flag == 1 && Root.DIR_Attr == 0x20) {
+      printf("found a file in the root directory from the path:\n");
+      printf("%s\n", Root.DIR_Name);
+      return 0;
     }
-    memcpy(&Root[i], &buffer[i * 32], 32);
+
+    // Verifying if the name ended
+    if(flag == 1 && !(Root.DIR_Name[j] >= 33 && Root.DIR_Name[j] <= 126)){
+      firstPathFile = i;
+    }
 
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
@@ -233,17 +257,16 @@ int main(int argc, char **argv) {
   }
   //readFileFAT(fd,&root,root.DIR_FstClusHI);
 
-
-  DIR_ENTRY *currentDir = calloc(Vol->Bpb.BPB_RootEntCnt, sizeof *Root);
-  *currentDir = *Root;
+  DIR_ENTRY currentDir;
+  currentDir = Root;
   int pathDepth;
   int currentPathFile = firstPathFile;
   int currentEntry = 0;
 
   // Search the other files from path
   for(pathDepth = 1; pathDepth < path_size; pathDepth+1){
-    WORD ClusterN = currentDir[currentPathFile].DIR_FstClusLO;
-    WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, &currentDir[currentPathFile], ClusterN);
+    WORD ClusterN = currentDir.DIR_FstClusLO;
+    WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, currentDir, ClusterN);
 
     /* Number of sectors in the root directory */
     WORD currentDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
