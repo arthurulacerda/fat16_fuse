@@ -211,6 +211,7 @@ char** path_treatment(char* path_entry, int* pathsz){
 
   			if(name_size > 8 || ext_size > 3){
   				printf("Error: Overfill of name or extension field in file %s\n",path[i]);
+  				exit(1);
   			}
   		}
   		// Other character accepted
@@ -227,6 +228,7 @@ char** path_treatment(char* path_entry, int* pathsz){
 
   			if(name_size > 8 || ext_size > 3){
   				printf("Error: Overfill of name or extension field in file %s\n",path[i]);
+  				exit(1);
   			}
   		}
   		else{
