@@ -124,8 +124,11 @@ char** path_treatment(char* path_entry, int* pathsz){
 
   // Counting number of files
   for(i = 0; path_entry[i] != '\0'; i++){
-    if(path_entry[i] == '/')
-      path_size++;
+    if(path_entry[i] == '/'){
+      if(path_entry[i+1] != '\0'){
+      	path_size++;
+      }
+    }
   }
 
   char** path = (char**) emalloc (path_size*sizeof(char*));
@@ -137,39 +140,108 @@ char** path_treatment(char* path_entry, int* pathsz){
   i = 0;
 
   slice = strtok(path_entry, token);
-  while(slice != NULL){
+  while(i<path_size){
     path[i++] = slice;
     //printf("\n\n%s\n\n",path[i-1]);
     slice = strtok(NULL,token);
   }
   
-  // Verifying if each directory is valid and making it uppercase
+  char ** format_path = (char**) emalloc (path_size*sizeof(char*));
   for(i = 0; i < path_size; i++){
-    for(j = 0; path[i][j] != '\0'; j++){
-      
-      if((path[i][j] >= 'A' && path[i][j] <='Z')||(path[i][j] >= '0' && path[i][j] <='9'))
-        continue;
-      if(path[i][j] >= 'a' && path[i][j] <='z'){
-        path[i][j] -= 32;
-        continue;
-      }
-      if(path[i][j] == '.'){
-        if(!(j == 0 || j==1 && path[i][0] == '.'))
-          path[i][j] = ' ';
-        continue;
-      }
-      if(path[i][j] == '$' || path[i][j] == '%' || path[i][j] == '\'' || path[i][j] == '-' || path[i][j] == '_' || path[i][j] == '@' || path[i][j] == '~' || path[i][j] == '`' || path[i][j] == '!' || path[i][j] == '(' || path[i][j] == ')' || path[i][j] == '{' || path[i][j] == '}' || path[i][j] == '^' || path[i][j] == '#' || path[i][j] == '&')
-        continue;
+  	format_path[i] = (char*) emalloc (11*sizeof(char));
+  }
 
-      printf("Invalid Path: %s\n",path[i]);
-      exit(1);
+
+  int name_size = 0; // Size of name field
+  int ext_size = 0; // Size of extension field
+  int k;
+  int dotflag = 0; // Verify if the dot character '.' has appeared.
+
+  // Verifying if each directory is valid and formatting it for FAT
+  for(i = 0; i < path_size; i++){
+  	for(j = 0, k = 0; ; j++, k++){
+  		if(path[i][j] == '.'){
+  			// Dir .
+  			if(j == 0 && path[i][j+1] == '\0'){
+  				format_path[i][0] = '.';
+  				for(k = 1; k < 11; k++){
+  					format_path[i][k] = ' ';
+  				}
+  				break;
+  			}
+
+  			// Dir ..
+  			if(j == 0 && path[i][j+1] == '.' && path[i][j+2] == '\0'){
+  				format_path[i][0] = '.';
+  				format_path[i][1] = '.';
+  				for(k = 2; k < 11; k++){
+  					format_path[i][k] = ' ';
+  				}
+  				break;
+  			}
+
+  			// Check ocurrency of past dot character.
+  			if(!dotflag){
+  				if(path[i][j+1] == '\0'){
+  					printf("Error: Empty extension after dot character (.) inf file %s\n",path[i]);
+  					exit(1);
+  				}
+
+  				dotflag = 1;
+  				for(;k < 8; k++){
+  					format_path[i][k] = ' ';
+  				}
+  				k = 7;
+  			} else{
+  				printf("Error: More than one dot character (.) in file %s\n",path[i]);
+  				exit(1);
+  			}
+  		}
+  		// End of file name
+  		else if(path[i][j] == '\0'){
+  			for(;k<11;k++){
+  				format_path[i][k] = ' ';
+  			}
+
+  			break;
+  		}
+  		// Lower case to Upper case
+  		else if(path[i][j] >= 'a' && path[i][j] <='z'){
+  			format_path[i][k] = path[i][j] - 32;
+
+  			if(name_size > 8 || ext_size > 3){
+  				printf("Error: Overfill of name or extension field in file %s\n",path[i]);
+  			}
+  		}
+  		// Other character accepted
+  		else if((path[i][j] >= 'A' && path[i][j] <='Z') || (path[i][j] >= '0' && path[i][j] <='9') || 
+  			path[i][j] == '$' || path[i][j] == '%' || path[i][j] == '\'' || path[i][j] == '-' || path[i][j] == '_' ||
+  			path[i][j] == '@' || path[i][j] == '~' || path[i][j] == '`' || path[i][j] == '!' || path[i][j] == '(' ||
+  			path[i][j] == ')' || path[i][j] == '{' || path[i][j] == '}' || path[i][j] == '^' || path[i][j] == '#' ||
+  			path[i][j] == '&'){
+  			format_path[i][k] = path[i][j];
+  			if(dotflag)
+  				ext_size++;
+  			else
+  				name_size++;
+
+  			if(name_size > 8 || ext_size > 3){
+  				printf("Error: Overfill of name or extension field in file %s\n",path[i]);
+  			}
+  		}
+  		else{
+  			printf("Error: Character not accepted in file %s\n",path[i]);
+  			exit(1);
+  		}
     }
-    //printf("%s\n", path[i]);
+    for(j = 0; j < 11; j++){
+    	printf("%c %x\n",format_path[i][j],format_path[i][j]);
+    }printf("\n");
   }
 
   *pathsz = path_size;
-
-  return path;
+  free(path);
+  return format_path;
 }
 
 VOLUME *fat16_init(FILE *fd, FILE *out) {
@@ -227,6 +299,7 @@ int main(int argc, char **argv) {
   /* Searching in the root directory first */
   int RootDirCnt = 1, i = 1, j, flag = 1, firstPathFile;
   sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
+
   for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
     memcpy(&Root, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
 
@@ -240,7 +313,7 @@ int main(int argc, char **argv) {
 
     // Comparing strings
     flag = 1;
-    for (j = 0; Root.DIR_Name[j] != '\0'; j++) {
+    for (j = 0; j< 11; j++) {
       if (Root.DIR_Name[j] != path[0][j]) {
         flag = 0;
         break;
@@ -249,9 +322,9 @@ int main(int argc, char **argv) {
 
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
      * root directory, stop the searching */
-    if (flag == 1 && Root.DIR_Attr == 0x20) {
-      printf("Found the file %s in the root directory!\n", Root.DIR_Name);
-      exit(0);
+    if(flag){
+    	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
+    	exit(0);
     }
 
     // Verifying if the name ended
