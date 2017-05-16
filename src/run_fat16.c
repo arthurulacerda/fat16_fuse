@@ -172,12 +172,35 @@ char** path_treatment(char* path_entry, int* pathsz){
   return path;
 }
 
+VOLUME *fat16_init(FILE *fd, FILE *out) {
+  VOLUME Fat16;
+  VOLUME *Vol = &Fat16;
+  Vol->Fat = NULL;
+
+  /* BPB */
+  sector_read(fd, 0, &Vol->Bpb);
+  printBPB(&Vol->Bpb, out);
+
+  /* First sector of the root directory */
+  Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 *
+      Vol->Bpb.BPB_NumFATS);
+
+  /* Number of sectors in the root directory */
+  DWORD RootDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
+      (Vol->Bpb.BPB_BytsPerSec - 1)) / Vol->Bpb.BPB_BytsPerSec;
+
+  /* First sector of the data region (cluster #2) */
+  Vol->FirstDataSector = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_NumFATS *
+      Vol->Bpb.BPB_FATSz16) + RootDirSectors;
+
+  return Vol;
+}
+
 int main(int argc, char **argv) {
   if (argv[1] == NULL) {
     printf("Missing FAT16 image file!\n");
     exit(0);
   }
-
   if (argv[2] == NULL) {
     printf("Missing PATH!\n");
     exit(0);
@@ -189,68 +212,57 @@ int main(int argc, char **argv) {
   /* Open output file */
   FILE *out = fopen("out", "w");
 
+  /* Initializing a FAT16 volume */
+  VOLUME *Vol = fat16_init(fd, out);
+
+  /* Buffer to store bytes from sector_read */
+  BYTE buffer[BYTES_PER_SECTOR];
+
   int path_size;
   char **path = path_treatment(argv[2], &path_size);
-  //int i1, j1;
-  //for (i1 = 0; i1 < 2; i1++) {
-  //  for (j1 = 0; j1 < path[i1][j1] != '\0'; j1++) {
-  //    printf("%c", path[i1][j1]);
-  //  }
-  //}
 
-  BYTE buffer[BYTES_PER_SECTOR];
-  VOLUME Fat16;
-  VOLUME *Vol = &Fat16;
-
-  /* Reading BPB */
-  sector_read(fd, 0, &Vol->Bpb);
-  printBPB(&Vol->Bpb, out);
-
-  /* Root directory */
+  /* Represents the root directory */
   DIR_ENTRY Root;
 
-  /* First sector of the root directory */
-  Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 *
-      Vol->Bpb.BPB_NumFATS);
-
-  /* Searching for the file/directory in the root directory */
+  /* Searching in the root directory first */
   int RootDirCnt = 1, i = 1, j, flag = 1, firstPathFile;
   sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
   for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
-    memcpy(&Root, &buffer[(i - 1) * 32], 32);
+    memcpy(&Root, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
 
+    /* If the directory entry is free, all the next directory entries are also
+     * free. So this file/directory could not be found */
     if (Root.DIR_Name[0] == 0x00) {
-      break;
+      fprintf(stdout, "%s: No such file or directory\n", path[0]);
+      exit(0);
     }
-
     printDIR(&Root, out);
 
     // Comparing strings
     flag = 1;
     for (j = 0; Root.DIR_Name[j] != '\0'; j++) {
-      printf("%c - %c\n", Root.DIR_Name[j], path[0][j]);
       if (Root.DIR_Name[j] != path[0][j]) {
         flag = 0;
         break;
       }
     }
 
-    // If the file is an ATTR_ARCHIVE, we stop here
+    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
+     * root directory, stop the searching */
     if (flag == 1 && Root.DIR_Attr == 0x20) {
-      printf("found a file in the root directory from the path:\n");
-      printf("%s\n", Root.DIR_Name);
-      return 0;
+      printf("Found the file %s in the root directory!\n", Root.DIR_Name);
+      exit(0);
     }
 
     // Verifying if the name ended
-    if(flag == 1 && !(Root.DIR_Name[j] >= 33 && Root.DIR_Name[j] <= 126)){
+    if (flag == 1 && !(Root.DIR_Name[j] >= 33 && Root.DIR_Name[j] <= 126)) {
       firstPathFile = i;
+      // TODO: call a function to keep searching in sub-directories of the root
     }
-
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
      * Read next sector */
-    if (i % 16 == 0) {
+    if (i % 16 == 0 && i != Vol->Bpb.BPB_RootEntCnt) {
       sector_read(fd, Vol->FirstRootDirSecNum + RootDirCnt, &buffer);
       RootDirCnt++;
     }
@@ -271,10 +283,6 @@ int main(int argc, char **argv) {
     /* Number of sectors in the root directory */
     WORD currentDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
         (Vol->Bpb.BPB_BytsPerSec - 1)) / Vol->Bpb.BPB_BytsPerSec;
-
-    /* First sector of the data region (cluster #2) */
-    Vol->FirstDataSector = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_NumFATS *
-        Vol->Bpb.BPB_FATSz16) + currentDirSectors;
 
     /* First sector of any valid cluster */
     WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
