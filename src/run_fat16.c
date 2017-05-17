@@ -299,6 +299,7 @@ int main(int argc, char **argv) {
     /* If the directory entry is free, all the next directory entries are also
      * free. So this file/directory could not be found */
     if (Root.DIR_Name[0] == 0x00) {
+      // TODO: remover essa mensagem
       printf("%s: No such file or directory\n", path[0]);
       exit(0);
     }
@@ -314,14 +315,15 @@ int main(int argc, char **argv) {
     }
 
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
-     * root directory, stop the searching */
-    if (flag) {
+     * root directory, stop searching */
+    if (flag && Root.DIR_Attr == 0x20) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
     	exit(0);
     }
 
-    // Verifying if the name ended
-    if (flag == 1 && !(Root.DIR_Name[j] >= 33 && Root.DIR_Name[j] <= 126)) {
+    /* If the first level of the path is a directory, continue searching
+     * in the root's subdirectories */
+    if (flag == 1) 
       firstPathFile = i;
       // TODO: call a function to keep searching in sub-directories of the root
     }
