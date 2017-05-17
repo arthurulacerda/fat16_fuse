@@ -139,8 +139,7 @@ char** path_treatment(char* path_entry, int* pathsz){
   
   char ** format_path = (char**) malloc (path_size*sizeof(char*));
   for(i = 0; i < path_size; i++){
-    format_path[i] = (char*) malloc (12*sizeof(char));
-    format_path[11] = '\0';
+    format_path[i] = (char*) malloc (11*sizeof(char));
   }
 
 
@@ -228,9 +227,6 @@ char** path_treatment(char* path_entry, int* pathsz){
   			exit(1);
   		}
     }
-    for(j = 0; j < 11; j++){
-    	printf("%c %x\n",format_path[i][j],format_path[i][j]);
-    }printf("\n");
   }
 
   *pathsz = path_size;
@@ -297,11 +293,8 @@ int main(int argc, char **argv) {
     /* If the directory entry is free, all the next directory entries are also
      * free. So this file/directory could not be found */
     if (Root.DIR_Name[0] == 0x00) {
-      // TODO: remover essa mensagem
-      printf("%s: No such file or directory\n", path[0]);
       exit(0);
     }
-    printDIR(Root);
 
     // Comparing strings
     flag = 1;
@@ -316,6 +309,7 @@ int main(int argc, char **argv) {
      * root directory, stop searching */
     if (flag && Root.DIR_Attr == 0x20) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
+      printDIR(Root);
     	exit(0);
     }
 
