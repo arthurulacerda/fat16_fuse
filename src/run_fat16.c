@@ -98,15 +98,6 @@ void printDIR(DIR_ENTRY *Dir, FILE *out) {
 
 }*/
 
-void *emalloc(size_t size) {
-  void *p = malloc(size);
-  if (!p) {
-    fprintf(stderr, "Out of memory!\n");
-    exit(EXIT_FAILURE);
-  }
-  return p;
-}
-
 WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
   WORD FatBuffer[BYTES_PER_SECTOR];
   WORD FATOffset = ClusterN * 2;
@@ -131,7 +122,7 @@ char** path_treatment(char* path_entry, int* pathsz){
     }
   }
 
-  char** path = (char**) emalloc (path_size*sizeof(char*));
+  char** path = (char**) malloc (path_size*sizeof(char*));
 
   // Dividing path names in separated file names
   const char token[2] = "/";
@@ -146,9 +137,9 @@ char** path_treatment(char* path_entry, int* pathsz){
     slice = strtok(NULL,token);
   }
   
-  char ** format_path = (char**) emalloc (path_size*sizeof(char*));
+  char ** format_path = (char**) malloc (path_size*sizeof(char*));
   for(i = 0; i < path_size; i++){
-  	format_path[i] = (char*) emalloc (11*sizeof(char));
+  	format_path[i] = (char*) malloc (11*sizeof(char));
   }
 
 
@@ -271,17 +262,17 @@ VOLUME *fat16_init(FILE *fd, FILE *out) {
 }
 
 int main(int argc, char **argv) {
-  if (argv[1] == NULL) {
-    printf("Missing FAT16 image file!\n");
-    exit(0);
-  }
-  if (argv[2] == NULL) {
-    printf("Missing PATH!\n");
+  if (argv[1] == NULL || argv[2] == NULL) {
+    printf("Usage: ./run_fat16 <FAT16 image> <path name>\n");
     exit(0);
   }
 
   /* Open FAT16 image file */
   FILE *fd = fopen(argv[1], "rb");
+  if (!fd) {
+    printf("%s: file not found\n", argv[1]);
+    exit(0);
+  }
 
   /* Open output file */
   FILE *out = fopen("out", "w");
@@ -295,11 +286,11 @@ int main(int argc, char **argv) {
   int path_size;
   char **path = path_treatment(argv[2], &path_size);
 
-  /* Represents the root directory */
+  /* Root directory */
   DIR_ENTRY Root;
 
   /* Searching in the root directory first */
-  int RootDirCnt = 1, i = 1, j, flag = 1, firstPathFile;
+  int RootDirCnt = 1, i, j, flag = 1, firstPathFile;
   sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
 
   for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
@@ -308,14 +299,14 @@ int main(int argc, char **argv) {
     /* If the directory entry is free, all the next directory entries are also
      * free. So this file/directory could not be found */
     if (Root.DIR_Name[0] == 0x00) {
-      fprintf(stdout, "%s: No such file or directory\n", path[0]);
+      printf("%s: No such file or directory\n", path[0]);
       exit(0);
     }
     printDIR(&Root, out);
 
     // Comparing strings
     flag = 1;
-    for (j = 0; j< 11; j++) {
+    for (j = 0; j < 11; j++) {
       if (Root.DIR_Name[j] != path[0][j]) {
         flag = 0;
         break;
@@ -324,7 +315,7 @@ int main(int argc, char **argv) {
 
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
      * root directory, stop the searching */
-    if(flag){
+    if (flag) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
     	exit(0);
     }

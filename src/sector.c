@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "sector.h"
 
 #define BYTES_PER_SECTOR 512
