@@ -55,42 +55,42 @@ typedef struct {
   BYTE *Fat;
 } VOLUME;
 
-void printBPB(BPB_BS *Bpb, FILE *out) {
+void printBPB(BPB_BS Bpb) {
   int i;
   for (i = 0; i < 11; i++) {
-    fprintf(out, "%c", Bpb->BS_VollLab[i]);
+    printf("%c", Bpb.BS_VollLab[i]);
   }
-  fprintf(out, "\n");
+  printf("\n");
   for (i = 0; i < 8; i++) {
-    fprintf(out, "%c", Bpb->BS_FilSysType[i]);
+    printf("%c", Bpb.BS_FilSysType[i]);
   }
-  fprintf(out, "\n");
-  fprintf(out, "OEMNAME: %s\n", Bpb->BS_OEMName);
-  fprintf(out, "BytsPersec: %d\n", Bpb->BPB_BytsPerSec);
-  fprintf(out, "SecPerClus: %d\n", Bpb->BPB_SecPerClus);
-  fprintf(out, "NumFATS: %x\n", Bpb->BPB_NumFATS);
-  fprintf(out, "VollID: %d\n", Bpb->BS_VollID);
-  fprintf(out, "RootEntCont: %d\n\n", Bpb->BPB_RootEntCnt);
+  printf("\n");
+  printf("OEMNAME: %s\n", Bpb.BS_OEMName);
+  printf("BytsPersec: %d\n", Bpb.BPB_BytsPerSec);
+  printf("SecPerClus: %d\n", Bpb.BPB_SecPerClus);
+  printf("NumFATS: %x\n", Bpb.BPB_NumFATS);
+  printf("VollID: %d\n", Bpb.BS_VollID);
+  printf("RootEntCont: %d\n\n", Bpb.BPB_RootEntCnt);
 }
 
-void printDIR(DIR_ENTRY *Dir, FILE *out) {
+void printDIR(DIR_ENTRY Dir) {
   int i;
-  fprintf(out, "Name: ");
+  printf("Name: ");
   for (i = 0; i < 11; i++) {
-    fprintf(out, "%c", Dir->DIR_Name[i]);
+    printf("%c", Dir.DIR_Name[i]);
   }
-  fprintf(out, "\n");
-  fprintf(out, "Attr: %x\n", Dir->DIR_Attr);
-  fprintf(out, "NTRes: %d\n", Dir->DIR_NTRes);
-  fprintf(out, "CrtTimeTenth: %d\n", Dir->DIR_CrtTimeTenth);
-  fprintf(out, "CrtTime: %d\n", Dir->DIR_CrtTime);
-  fprintf(out, "CrtDate: %d\n", Dir->DIR_CrtDate);
-  fprintf(out, "LstAccDate: %d\n", Dir->DIR_LstAccDate);
-  fprintf(out, "FstClusHI: %d\n", Dir->DIR_FstClusHI);
-  fprintf(out, "WrtTime: %d\n", Dir->DIR_WrtTime);
-  fprintf(out, "WrtDate: %d\n", Dir->DIR_WrtDate);
-  fprintf(out, "FstClusLO: %d\n", Dir->DIR_FstClusLO);
-  fprintf(out, "FileSize: %d\n\n", Dir->DIR_FileSize);
+  printf("\n");
+  printf("Attr: %x\n", Dir.DIR_Attr);
+  printf("NTRes: %d\n", Dir.DIR_NTRes);
+  printf("CrtTimeTenth: %d\n", Dir.DIR_CrtTimeTenth);
+  printf("CrtTime: %d\n", Dir.DIR_CrtTime);
+  printf("CrtDate: %d\n", Dir.DIR_CrtDate);
+  printf("LstAccDate: %d\n", Dir.DIR_LstAccDate);
+  printf("FstClusHI: %d\n", Dir.DIR_FstClusHI);
+  printf("WrtTime: %d\n", Dir.DIR_WrtTime);
+  printf("WrtDate: %d\n", Dir.DIR_WrtDate);
+  printf("FstClusLO: %d\n", Dir.DIR_FstClusLO);
+  printf("FileSize: %d\n\n", Dir.DIR_FileSize);
 }
 
 /*void readFileFAT(FILE* fd, DIR *Dir, WORD fatPosition){
@@ -139,7 +139,8 @@ char** path_treatment(char* path_entry, int* pathsz){
   
   char ** format_path = (char**) malloc (path_size*sizeof(char*));
   for(i = 0; i < path_size; i++){
-  	format_path[i] = (char*) malloc (11*sizeof(char));
+    format_path[i] = (char*) malloc (12*sizeof(char));
+    format_path[11] = '\0';
   }
 
 
@@ -237,14 +238,14 @@ char** path_treatment(char* path_entry, int* pathsz){
   return format_path;
 }
 
-VOLUME *fat16_init(FILE *fd, FILE *out) {
+VOLUME *fat16_init(FILE *fd) {
   VOLUME Fat16;
   VOLUME *Vol = &Fat16;
   Vol->Fat = NULL;
 
   /* BPB */
   sector_read(fd, 0, &Vol->Bpb);
-  printBPB(&Vol->Bpb, out);
+  printBPB(Vol->Bpb);
 
   /* First sector of the root directory */
   Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 *
@@ -277,11 +278,8 @@ int main(int argc, char **argv) {
   int path_size;
   char **path = path_treatment(argv[2], &path_size);
 
-  /* Open output file */
-  FILE *out = fopen("out", "w");
-
   /* Initializing a FAT16 volume */
-  VOLUME *Vol = fat16_init(fd, out);
+  VOLUME *Vol = fat16_init(fd);
 
   /* Buffer to store bytes from sector_read */
   BYTE buffer[BYTES_PER_SECTOR];
@@ -303,7 +301,7 @@ int main(int argc, char **argv) {
       printf("%s: No such file or directory\n", path[0]);
       exit(0);
     }
-    printDIR(&Root, out);
+    printDIR(Root);
 
     // Comparing strings
     flag = 1;
@@ -358,7 +356,7 @@ int main(int argc, char **argv) {
     DIR_ENTRY Dir;
     sector_read(fd, FirstSectorofCluster, &buffer);
     memcpy(&Dir, &buffer[currentEntry*32], 32);
-    printDIR(&Dir, out);
+    printDIR(Dir);
 
     if(pathDepth == 1)
       break;
@@ -377,7 +375,6 @@ int main(int argc, char **argv) {
 
 
   fclose(fd);
-  fclose(out);
 
   //sector_read(fd, 4, &FatBuffer);
   //printf("%d\n", FatBuffer[2]);
