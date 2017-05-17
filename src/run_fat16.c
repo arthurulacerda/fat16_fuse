@@ -323,7 +323,7 @@ int main(int argc, char **argv) {
 
     /* If the first level of the path is a directory, continue searching
      * in the root's subdirectories */
-    if (flag == 1) 
+    if (flag == 1) {
       firstPathFile = i;
       // TODO: call a function to keep searching in sub-directories of the root
     }
