@@ -252,63 +252,63 @@ VOLUME *fat16_init(FILE *fd) {
   return Vol;
 }
 
-void find_subdir(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, char **path, int pathsize) {
-  int pathdepth, i, j, DirSecCnt = 1, cmpstring;
+void find_subdir(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, char **path, int pathsize,
+                 int pathdepth) {
+  int i, j, DirSecCnt = 1, cmpstring;
   BYTE buffer[BYTES_PER_SECTOR];
 
-  // Search the other files from path
-  for (pathdepth = 1; pathdepth < pathsize; pathdepth+1) {
-    WORD ClusterN = Dir.DIR_FstClusLO;
-    WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, Dir, ClusterN);
+  WORD ClusterN = Dir.DIR_FstClusLO;
+  WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, Dir, ClusterN);
 
-    /* First sector of any valid cluster */
-    WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
-    printDIR(Dir);
+  /* First sector of any valid cluster */
+  WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
 
-    sector_read(fd, FirstSectorofCluster, &buffer);
-    for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
-      memcpy(&Dir, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+  sector_read(fd, FirstSectorofCluster, &buffer);
+  for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
+    memcpy(&Dir, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
 
-      /* Comparing strings */
-      cmpstring = 1;
-      for (j = 0; j < 11; j++) {
-        if (Dir.DIR_Name[j] != path[pathdepth][j]) {
-          cmpstring = 0;
-          break;
-        }
+    /* Comparing strings */
+    cmpstring = 1;
+    for (j = 0; j < 11; j++) {
+      if (Dir.DIR_Name[j] != path[pathdepth][j]) {
+        cmpstring = 0;
+        break;
       }
+    }
 
-      /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
-       * root directory, stop searching */
-      if (cmpstring && Dir.DIR_Attr == 0x20) {
-        printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
-            path[pathdepth - 1]);
-        printDIR(Dir);
-        exit(0);
-      }
+    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
+     * root directory, stop searching */
+    if (cmpstring && Dir.DIR_Attr == 0x20) {
+      printDIR(Dir);
+      printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
+          path[pathdepth - 1]);
+      exit(0);
+    }
 
-      if (cmpstring && Dir.DIR_Attr == 0x10) {
-        printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
-            path[pathdepth - 1]);
-        printDIR(Dir);
-        exit(0);
-      }
+    if (cmpstring && Dir.DIR_Attr == 0x10 && pathdepth + 1 == pathsize) {
+      printf("%s: file found\n", path[pathdepth]);
+      exit(0);
+    }
 
-      if (i % 16 == 0) {
-        if (DirSecCnt < Vol->Bpb.BPB_SecPerClus) {
-          sector_read(fd, Vol->FirstRootDirSecNum + DirSecCnt, &buffer);
-          DirSecCnt++;
-        } else {
-          // End of cluster
-          // Search for the next cluster
-          if (FatClusEntryVal == 0xffff) {
-            printf("%s: file not found\n", path[pathdepth]);
-            exit(0);
-          }
+    if (cmpstring && Dir.DIR_Attr == 0x10) {
+      printDIR(Dir);
+      find_subdir(fd, Vol, Dir, path, pathsize, pathdepth + 1);
+      exit(0);
+    }
+
+    if (i % 16 == 0) {
+      if (DirSecCnt < Vol->Bpb.BPB_SecPerClus) {
+        sector_read(fd, Vol->FirstRootDirSecNum + DirSecCnt, &buffer);
+        DirSecCnt++;
+      } else {
+        // End of cluster
+        // Search for the next cluster
+        if (FatClusEntryVal == 0xffff) {
+          printf("%s: file not found\n", path[pathdepth]);
+          exit(0);
         }
       }
     }
-    if (pathdepth == 1) break;
   }
 
 }
@@ -371,7 +371,7 @@ int main(int argc, char **argv) {
     /* If the first level of the path is a directory, continue searching
      * in the root's sub-directories */
     if (cmpstring == 1) {
-      find_subdir(fd, Vol, Root, path, pathsize);
+      find_subdir(fd, Vol, Root, path, pathsize, 1);
     }
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
