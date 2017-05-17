@@ -94,7 +94,7 @@ void printDIR(DIR_ENTRY Dir) {
 }
 
 WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
-  WORD FatBuffer[BYTES_PER_SECTOR];
+  BYTE FatBuffer[BYTES_PER_SECTOR];
   WORD FATOffset = ClusterN * 2;
   WORD FatSecNum = Vol->Bpb.BPB_RsvdSecCnt + (FATOffset / Vol->Bpb.BPB_BytsPerSec);
   WORD FatEntOffset = FATOffset % Vol->Bpb.BPB_BytsPerSec;
@@ -266,6 +266,7 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
   sector_read(fd, FirstSectorofCluster, &buffer);
   for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
     memcpy(&Dir, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+    //printDIR(Dir);
 
     /* Comparing strings */
     cmpstring = 1;
@@ -279,7 +280,6 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
      * root directory, stop searching */
     if (cmpstring && Dir.DIR_Attr == 0x20) {
-      printDIR(Dir);
       printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
           path[pathdepth - 1]);
       exit(0);
@@ -297,8 +297,9 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
     }
 
     if (i % 16 == 0) {
+      printf("%d\n", i);
       if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
-        sector_read(fd, Vol.FirstRootDirSecNum + DirSecCnt, &buffer);
+        sector_read(fd, FirstSectorofCluster + DirSecCnt, &buffer);
         DirSecCnt++;
       } else {
         // End of cluster
@@ -306,6 +307,13 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
         if (FatClusEntryVal == 0xffff) {
           printf("%s: file not found\n", path[pathdepth]);
           exit(0);
+        } else if (FatClusEntryVal >= 0x0002) {
+          printf("%x\n", FatClusEntryVal);
+          ClusterN = FatClusEntryVal;
+          FatClusEntryVal = fat_entry_by_cluster(fd, &Vol, Dir, ClusterN);
+          FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+          sector_read(fd, FirstSectorofCluster, &buffer);
+          i = 0;
         }
       }
     }
@@ -363,6 +371,14 @@ int main(int argc, char **argv) {
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
      * root directory, stop searching */
     if (cmpstring && Root.DIR_Attr == 0x20) {
+    	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
+      printDIR(Root);
+    	exit(0);
+    }
+
+    /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
+     * the root directory, stop searching */
+    if (cmpstring && Root.DIR_Attr == 0x10 && pathsize == 1) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
       printDIR(Root);
     	exit(0);
