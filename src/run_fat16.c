@@ -252,16 +252,16 @@ VOLUME *fat16_init(FILE *fd) {
   return Vol;
 }
 
-void find_subdir(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, char **path, int pathsize,
+void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
                  int pathdepth) {
   int i, j, DirSecCnt = 1, cmpstring;
   BYTE buffer[BYTES_PER_SECTOR];
 
   WORD ClusterN = Dir.DIR_FstClusLO;
-  WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, Dir, ClusterN);
+  WORD FatClusEntryVal = fat_entry_by_cluster(fd, &Vol, Dir, ClusterN);
 
   /* First sector of any valid cluster */
-  WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
+  WORD FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
 
   sector_read(fd, FirstSectorofCluster, &buffer);
   for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
@@ -297,8 +297,8 @@ void find_subdir(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, char **path, int pathsize
     }
 
     if (i % 16 == 0) {
-      if (DirSecCnt < Vol->Bpb.BPB_SecPerClus) {
-        sector_read(fd, Vol->FirstRootDirSecNum + DirSecCnt, &buffer);
+      if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
+        sector_read(fd, Vol.FirstRootDirSecNum + DirSecCnt, &buffer);
         DirSecCnt++;
       } else {
         // End of cluster
@@ -371,7 +371,7 @@ int main(int argc, char **argv) {
     /* If the first level of the path is a directory, continue searching
      * in the root's sub-directories */
     if (cmpstring == 1) {
-      find_subdir(fd, Vol, Root, path, pathsize, 1);
+      find_subdir(fd, *Vol, Root, path, pathsize, 1);
     }
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
