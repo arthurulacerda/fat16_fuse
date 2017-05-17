@@ -49,10 +49,10 @@ typedef struct {
 } __attribute__ ((packed)) DIR_ENTRY;
 
 typedef struct {
-  BPB_BS Bpb;
   DWORD FirstRootDirSecNum;
   DWORD FirstDataSector;
   BYTE *Fat;
+  BPB_BS Bpb;
 } VOLUME;
 
 void printBPB(BPB_BS Bpb) {
@@ -93,11 +93,6 @@ void printDIR(DIR_ENTRY Dir) {
   printf("FileSize: %d\n\n", Dir.DIR_FileSize);
 }
 
-/*void readFileFAT(FILE* fd, DIR *Dir, WORD fatPosition){
-  int fatSector = fatPosition / 32; //512 has 32 slots of 16bytes.
-
-}*/
-
 WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
   WORD FatBuffer[BYTES_PER_SECTOR];
   WORD FATOffset = ClusterN * 2;
@@ -109,7 +104,7 @@ WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
 
 char** path_treatment(char* path_entry, int* pathsz){
 
-  int path_size = 1;
+  int pathsize = 1;
   int i,j;
   char letter = '0';
 
@@ -117,12 +112,12 @@ char** path_treatment(char* path_entry, int* pathsz){
   for(i = 0; path_entry[i] != '\0'; i++){
     if(path_entry[i] == '/'){
       if(path_entry[i+1] != '\0'){
-      	path_size++;
+      	pathsize++;
       }
     }
   }
 
-  char** path = (char**) malloc (path_size*sizeof(char*));
+  char** path = (char**) malloc (pathsize*sizeof(char*));
 
   // Dividing path names in separated file names
   const char token[2] = "/";
@@ -131,14 +126,14 @@ char** path_treatment(char* path_entry, int* pathsz){
   i = 0;
 
   slice = strtok(path_entry, token);
-  while(i<path_size){
+  while(i<pathsize){
     path[i++] = slice;
     //printf("\n\n%s\n\n",path[i-1]);
     slice = strtok(NULL,token);
   }
   
-  char ** format_path = (char**) malloc (path_size*sizeof(char*));
-  for(i = 0; i < path_size; i++){
+  char ** format_path = (char**) malloc (pathsize*sizeof(char*));
+  for(i = 0; i < pathsize; i++){
     format_path[i] = (char*) malloc (11*sizeof(char));
   }
 
@@ -149,7 +144,7 @@ char** path_treatment(char* path_entry, int* pathsz){
   int dotflag = 0; // Verify if the dot character '.' has appeared.
 
   // Verifying if each directory is valid and formatting it for FAT
-  for(i = 0; i < path_size; i++){
+  for(i = 0; i < pathsize; i++){
   	for(j = 0, k = 0; ; j++, k++){
   		if(path[i][j] == '.'){
   			// Dir .
@@ -229,7 +224,7 @@ char** path_treatment(char* path_entry, int* pathsz){
     }
   }
 
-  *pathsz = path_size;
+  *pathsz = pathsize;
   free(path);
   return format_path;
 }
@@ -244,8 +239,7 @@ VOLUME *fat16_init(FILE *fd) {
   printBPB(Vol->Bpb);
 
   /* First sector of the root directory */
-  Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 *
-      Vol->Bpb.BPB_NumFATS);
+  Vol->FirstRootDirSecNum = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_FATSz16 * Vol->Bpb.BPB_NumFATS);
 
   /* Number of sectors in the root directory */
   DWORD RootDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
@@ -256,6 +250,67 @@ VOLUME *fat16_init(FILE *fd) {
       Vol->Bpb.BPB_FATSz16) + RootDirSectors;
 
   return Vol;
+}
+
+void find_subdir(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, char **path, int pathsize) {
+  int pathdepth, i, j, DirSecCnt = 1, cmpstring;
+  BYTE buffer[BYTES_PER_SECTOR];
+
+  // Search the other files from path
+  for (pathdepth = 1; pathdepth < pathsize; pathdepth+1) {
+    WORD ClusterN = Dir.DIR_FstClusLO;
+    WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, Dir, ClusterN);
+
+    /* First sector of any valid cluster */
+    WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
+    printDIR(Dir);
+
+    sector_read(fd, FirstSectorofCluster, &buffer);
+    for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
+      memcpy(&Dir, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+
+      /* Comparing strings */
+      cmpstring = 1;
+      for (j = 0; j < 11; j++) {
+        if (Dir.DIR_Name[j] != path[pathdepth][j]) {
+          cmpstring = 0;
+          break;
+        }
+      }
+
+      /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
+       * root directory, stop searching */
+      if (cmpstring && Dir.DIR_Attr == 0x20) {
+        printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
+            path[pathdepth - 1]);
+        printDIR(Dir);
+        exit(0);
+      }
+
+      if (cmpstring && Dir.DIR_Attr == 0x10) {
+        printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
+            path[pathdepth - 1]);
+        printDIR(Dir);
+        exit(0);
+      }
+
+      if (i % 16 == 0) {
+        if (DirSecCnt < Vol->Bpb.BPB_SecPerClus) {
+          sector_read(fd, Vol->FirstRootDirSecNum + DirSecCnt, &buffer);
+          DirSecCnt++;
+        } else {
+          // End of cluster
+          // Search for the next cluster
+          if (FatClusEntryVal == 0xffff) {
+            printf("%s: file not found\n", path[pathdepth]);
+            exit(0);
+          }
+        }
+      }
+    }
+    if (pathdepth == 1) break;
+  }
+
 }
 
 int main(int argc, char **argv) {
@@ -271,8 +326,8 @@ int main(int argc, char **argv) {
     exit(0);
   }
 
-  int path_size;
-  char **path = path_treatment(argv[2], &path_size);
+  int pathsize;
+  char **path = path_treatment(argv[2], &pathsize);
 
   /* Initializing a FAT16 volume */
   VOLUME *Vol = fat16_init(fd);
@@ -284,7 +339,7 @@ int main(int argc, char **argv) {
   DIR_ENTRY Root;
 
   /* Searching in the root directory first */
-  int RootDirCnt = 1, i, j, flag = 1, firstPathFile;
+  int RootDirCnt = 1, i, j, cmpstring = 1;
   sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
 
   for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
@@ -297,27 +352,26 @@ int main(int argc, char **argv) {
     }
 
     // Comparing strings
-    flag = 1;
+    cmpstring = 1;
     for (j = 0; j < 11; j++) {
       if (Root.DIR_Name[j] != path[0][j]) {
-        flag = 0;
+        cmpstring = 0;
         break;
       }
     }
 
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
      * root directory, stop searching */
-    if (flag && Root.DIR_Attr == 0x20) {
+    if (cmpstring && Root.DIR_Attr == 0x20) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
       printDIR(Root);
     	exit(0);
     }
 
     /* If the first level of the path is a directory, continue searching
-     * in the root's subdirectories */
-    if (flag == 1) {
-      firstPathFile = i;
-      // TODO: call a function to keep searching in sub-directories of the root
+     * in the root's sub-directories */
+    if (cmpstring == 1) {
+      find_subdir(fd, Vol, Root, path, pathsize);
     }
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
@@ -327,50 +381,6 @@ int main(int argc, char **argv) {
       RootDirCnt++;
     }
   }
-  //readFileFAT(fd,&root,root.DIR_FstClusHI);
-
-  DIR_ENTRY currentDir;
-  currentDir = Root;
-  int pathDepth;
-  int currentPathFile = firstPathFile;
-  int currentEntry = 0;
-
-  // Search the other files from path
-  for(pathDepth = 1; pathDepth < path_size; pathDepth+1){
-    WORD ClusterN = currentDir.DIR_FstClusLO;
-    WORD FatClusEntryVal = fat_entry_by_cluster(fd, Vol, currentDir, ClusterN);
-
-    /* Number of sectors in the root directory */
-    WORD currentDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
-        (Vol->Bpb.BPB_BytsPerSec - 1)) / Vol->Bpb.BPB_BytsPerSec;
-
-    /* First sector of any valid cluster */
-    WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
-
-    DIR_ENTRY Dir;
-    sector_read(fd, FirstSectorofCluster, &buffer);
-    memcpy(&Dir, &buffer[currentEntry*32], 32);
-    printDIR(Dir);
-
-    if(pathDepth == 1)
-      break;
-  }
-
-  /* Number of FAT entries */
-
-  /* FAT */
-  //WORD *Fat = calloc(Bpb.BPB_FATSz16, sizeof *Fat);
-  //if (!Fat) exit(2);
-  
-  /* Determination of FAT entry for a cluster */
-  
-
-  
-
-
   fclose(fd);
-
-  //sector_read(fd, 4, &FatBuffer);
-  //printf("%d\n", FatBuffer[2]);
   return 0;
 }
