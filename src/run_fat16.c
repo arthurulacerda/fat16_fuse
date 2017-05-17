@@ -274,6 +274,9 @@ int main(int argc, char **argv) {
     exit(0);
   }
 
+  int path_size;
+  char **path = path_treatment(argv[2], &path_size);
+
   /* Open output file */
   FILE *out = fopen("out", "w");
 
@@ -282,9 +285,6 @@ int main(int argc, char **argv) {
 
   /* Buffer to store bytes from sector_read */
   BYTE buffer[BYTES_PER_SECTOR];
-
-  int path_size;
-  char **path = path_treatment(argv[2], &path_size);
 
   /* Root directory */
   DIR_ENTRY Root;
