@@ -55,6 +55,9 @@ typedef struct {
   BPB_BS Bpb;
 } VOLUME;
 
+void find_root(FILE*, VOLUME, DIR_ENTRY, char**, int, int);
+void find_subdir(FILE*, VOLUME, DIR_ENTRY, char**, int, int, int);
+
 void printBPB(BPB_BS Bpb) {
   int i;
   for (i = 0; i < 11; i++) {
@@ -252,8 +255,68 @@ VOLUME *fat16_init(FILE *fd) {
   return Vol;
 }
 
+void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char **path, int pathdepth,
+               int pathsize) {
+  /* Buffer to store bytes from sector_read */
+  BYTE buffer[BYTES_PER_SECTOR];
+
+  sector_read(fd, Vol.FirstRootDirSecNum, &buffer);
+
+  int RootDirCnt = 1, i, j, cmpstring = 1;
+  for (i = 1; i <= Vol.Bpb.BPB_RootEntCnt; i++) {
+    memcpy(&Root, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+
+    /* If the directory entry is free, all the next directory entries are also
+     * free. So this file/directory could not be found */
+    if (Root.DIR_Name[0] == 0x00) {
+      exit(0);
+    }
+
+    // Comparing strings
+    cmpstring = 1;
+    for (j = 0; j < 11; j++) {
+      if (Root.DIR_Name[j] != path[pathdepth][j]) {
+        cmpstring = 0;
+        break;
+      }
+    }
+
+    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
+     * root directory, stop searching */
+    if (cmpstring && Root.DIR_Attr == 0x20) {
+    	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
+      printDIR(Root);
+    	exit(0);
+    }
+
+    /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
+     * the root directory, stop searching */
+    if (cmpstring && Root.DIR_Attr == 0x10 && pathsize == pathdepth + 1) {
+    	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
+      printDIR(Root);
+    	exit(0);
+    }
+
+    /* If the first level of the path is a directory, continue searching
+     * in the root's sub-directories */
+    if (cmpstring && Root.DIR_Attr == 0x10) {
+      find_subdir(fd, Vol, Root, path, pathsize, 1, 1);
+    }
+
+    /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
+     * Read next sector */
+    if (i % 16 == 0 && i != Vol.Bpb.BPB_RootEntCnt) {
+      sector_read(fd, Vol.FirstRootDirSecNum + RootDirCnt, &buffer);
+      RootDirCnt++;
+    }
+  }
+}
+
 void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
-                 int pathdepth) {
+                 int pathdepth, int currentdepth) {
+  if (currentdepth == 0) {
+    find_root(fd, Vol, Dir, path, pathdepth, pathsize);
+  }
   int i, j, DirSecCnt = 1, cmpstring;
   BYTE buffer[BYTES_PER_SECTOR];
 
@@ -266,7 +329,6 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
   sector_read(fd, FirstSectorofCluster, &buffer);
   for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
     memcpy(&Dir, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
-    //printDIR(Dir);
 
     /* Comparing strings */
     cmpstring = 1;
@@ -277,23 +339,24 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
       }
     }
 
-    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
-     * root directory, stop searching */
-    if (cmpstring && Dir.DIR_Attr == 0x20) {
+    /* If the path is only one file (ATTR_ARCHIVE) and it is located in this
+     * directory or if the current path is a directory finishes in this
+     * directory, stop searching */
+    if ((cmpstring && Dir.DIR_Attr == 0x20) ||
+        (cmpstring && Dir.DIR_Attr == 0x10 && pathdepth + 1 == pathsize)) {
       printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
           path[pathdepth - 1]);
       exit(0);
     }
 
-    if (cmpstring && Dir.DIR_Attr == 0x10 && pathdepth + 1 == pathsize) {
-      printf("%s: file found\n", path[pathdepth]);
-      exit(0);
-    }
-
     if (cmpstring && Dir.DIR_Attr == 0x10) {
       printDIR(Dir);
-      find_subdir(fd, Vol, Dir, path, pathsize, pathdepth + 1);
-      exit(0);
+      if (path[pathdepth][0] == '.' && path[pathdepth][1] == '.') {
+        currentdepth--;
+      } else {
+        currentdepth++;
+      }
+      find_subdir(fd, Vol, Dir, path, pathsize, pathdepth + 1, currentdepth);
     }
 
     if (i % 16 == 0) {
@@ -314,11 +377,11 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
           FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
           sector_read(fd, FirstSectorofCluster, &buffer);
           i = 0;
+          DirSecCnt = 1;
         }
       }
     }
   }
-
 }
 
 int main(int argc, char **argv) {
@@ -340,63 +403,12 @@ int main(int argc, char **argv) {
   /* Initializing a FAT16 volume */
   VOLUME *Vol = fat16_init(fd);
 
-  /* Buffer to store bytes from sector_read */
-  BYTE buffer[BYTES_PER_SECTOR];
-
   /* Root directory */
   DIR_ENTRY Root;
 
-  /* Searching in the root directory first */
-  int RootDirCnt = 1, i, j, cmpstring = 1;
-  sector_read(fd, Vol->FirstRootDirSecNum, &buffer);
+  /* Searching in the root directory first */ 
+  find_root(fd, *Vol, Root, path, 0, pathsize);
 
-  for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
-    memcpy(&Root, &buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
-
-    /* If the directory entry is free, all the next directory entries are also
-     * free. So this file/directory could not be found */
-    if (Root.DIR_Name[0] == 0x00) {
-      exit(0);
-    }
-
-    // Comparing strings
-    cmpstring = 1;
-    for (j = 0; j < 11; j++) {
-      if (Root.DIR_Name[j] != path[0][j]) {
-        cmpstring = 0;
-        break;
-      }
-    }
-
-    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
-     * root directory, stop searching */
-    if (cmpstring && Root.DIR_Attr == 0x20) {
-    	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
-      printDIR(Root);
-    	exit(0);
-    }
-
-    /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
-     * the root directory, stop searching */
-    if (cmpstring && Root.DIR_Attr == 0x10 && pathsize == 1) {
-    	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
-      printDIR(Root);
-    	exit(0);
-    }
-
-    /* If the first level of the path is a directory, continue searching
-     * in the root's sub-directories */
-    if (cmpstring == 1) {
-      find_subdir(fd, *Vol, Root, path, pathsize, 1);
-    }
-
-    /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
-     * Read next sector */
-    if (i % 16 == 0 && i != Vol->Bpb.BPB_RootEntCnt) {
-      sector_read(fd, Vol->FirstRootDirSecNum + RootDirCnt, &buffer);
-      RootDirCnt++;
-    }
-  }
   fclose(fd);
   return 0;
 }
