@@ -300,7 +300,7 @@ void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char **path, int pathdepth,
     /* If the first level of the path is a directory, continue searching
      * in the root's sub-directories */
     if (cmpstring && Root.DIR_Attr == 0x10) {
-      find_subdir(fd, Vol, Root, path, pathsize, 1, 1);
+      find_subdir(fd, Vol, Root, path, pathsize, pathdepth+1, 1);
     }
 
     /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
@@ -338,7 +338,6 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
         break;
       }
     }
-
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in this
      * directory or if the current path is a directory finishes in this
      * directory, stop searching */
@@ -350,7 +349,7 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
     }
 
     if (cmpstring && Dir.DIR_Attr == 0x10) {
-      printDIR(Dir);
+      //printDIR(Dir);
       if (path[pathdepth][0] == '.' && path[pathdepth][1] == '.') {
         currentdepth--;
       } else {
