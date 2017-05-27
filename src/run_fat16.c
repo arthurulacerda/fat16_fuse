@@ -72,13 +72,13 @@ void printDIR(DIR_ENTRY Dir) {
  * sector of data and root section).
  * @CusterN: the Nth cluster of the data section.
 **/
-WORD fat_entry_by_cluster(FILE * fd, VOLUME * Vol, WORD ClusterN) {
+WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, WORD ClusterN) {
   BYTE FatBuffer[BYTES_PER_SECTOR];
   WORD FATOffset = ClusterN * 2;
   WORD FatSecNum = Vol -> Bpb.BPB_RsvdSecCnt + (FATOffset / Vol -> Bpb.BPB_BytsPerSec);
   WORD FatEntOffset = FATOffset % Vol -> Bpb.BPB_BytsPerSec;
   sector_read(fd, FatSecNum, & FatBuffer);
-  return *((WORD * ) & FatBuffer[FatEntOffset]);
+  return *((WORD *) & FatBuffer[FatEntOffset]);
 }
 
 /**
@@ -93,7 +93,7 @@ WORD fat_entry_by_cluster(FILE * fd, VOLUME * Vol, WORD ClusterN) {
  * @pathInput: User input string, the path of files to go trough.
  * @pathSz: Address of the variable that will keep the number of files in the path.
 **/
-char ** path_treatment(char * pathInput, int * pathSz) {
+char ** path_treatment(char *pathInput, int *pathSz) {
 
   int pathSize = 1;
   int i, j;
@@ -108,10 +108,10 @@ char ** path_treatment(char * pathInput, int * pathSz) {
     }
   }
 
-  char ** path = (char ** ) malloc(pathSize * sizeof(char * ));
+  char ** path = (char ** ) malloc(pathSize * sizeof(char *));
 
   const char token[2] = "/";
-  char * slice;
+  char *slice;
 
   i = 0;
 
@@ -122,9 +122,9 @@ char ** path_treatment(char * pathInput, int * pathSz) {
     slice = strtok(NULL, token);
   }
 
-  char ** pathFormatted = (char ** ) malloc(pathSize * sizeof(char * ));
+  char ** pathFormatted = (char ** ) malloc(pathSize * sizeof(char *));
   for (i = 0; i < pathSize; i++) {
-    pathFormatted[i] = (char * ) malloc(11 * sizeof(char));
+    pathFormatted[i] = (char *) malloc(11 * sizeof(char));
   }
 
   int nameSize = 0;
@@ -231,7 +231,7 @@ char ** path_treatment(char * pathInput, int * pathSz) {
     }
   }
 
-  * pathSz = pathSize;
+  *pathSz = pathSize;
   free(path);
   return pathFormatted;
 }
@@ -246,15 +246,15 @@ char ** path_treatment(char * pathInput, int * pathSz) {
  * Parameters
  * @fd: File descriptor.
 **/
-VOLUME * fat16_init(FILE * fd) {
-  VOLUME * Vol = malloc(sizeof * Vol);
+VOLUME *fat16_init(FILE *fd) {
+  VOLUME *Vol = malloc(sizeof *Vol);
 
   /* BPB */
   sector_read(fd, 0, & Vol -> Bpb);
   printBPB(Vol -> Bpb);
 
   /* First sector of the root directory */
-  Vol -> FirstRootDirSecNum = Vol -> Bpb.BPB_RsvdSecCnt + (Vol -> Bpb.BPB_FATSz16 * Vol -> Bpb.BPB_NumFATS);
+  Vol -> FirstRootDirSecNum = Vol -> Bpb.BPB_RsvdSecCnt + (Vol -> Bpb.BPB_FATSz16 *Vol -> Bpb.BPB_NumFATS);
 
   /* Number of sectors in the root directory */
   DWORD RootDirSectors = ((Vol -> Bpb.BPB_RootEntCnt * 32) +
@@ -282,7 +282,7 @@ VOLUME * fat16_init(FILE * fd) {
  * @pathSize: Number of files in the path.
  * @pathDepth: Depth, or index, o the current file of the path.
 **/
-void find_root(FILE * fd, VOLUME Vol, DIR_ENTRY Root, char ** path, int pathSize,
+void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char ** path, int pathSize,
   int pathDepth) {
   /* Buffer to store bytes from sector_read */
   BYTE buffer[BYTES_PER_SECTOR];
@@ -355,7 +355,7 @@ void find_root(FILE * fd, VOLUME Vol, DIR_ENTRY Root, char ** path, int pathSize
  * @pathDepth: Depth, or index, o the current file of the path.
  * @rootDepth: Depth to the root.
 **/
-void find_subdir(FILE * fd, VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSize,
+void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSize,
   int pathDepth, int rootDepth) {
   if (rootDepth == 0) {
     find_root(fd, Vol, Dir, path, pathSize, pathDepth);
@@ -367,7 +367,7 @@ void find_subdir(FILE * fd, VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSiz
   WORD FatClusEntryVal = fat_entry_by_cluster(fd, & Vol, ClusterN);
 
   /* First sector of any valid cluster */
-  WORD FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+  WORD FirstSectorofCluster = ((ClusterN - 2) *Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
 
   sector_read(fd, FirstSectorofCluster, & buffer);
   for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
@@ -426,7 +426,7 @@ void find_subdir(FILE * fd, VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSiz
           /* Update the fat entry */
           FatClusEntryVal = fat_entry_by_cluster(fd, & Vol, ClusterN);
           /* Calculates the first sector of the cluster */
-          FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+          FirstSectorofCluster = ((ClusterN - 2) *Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
           /* Read it, and then continue */
           sector_read(fd, FirstSectorofCluster, & buffer);
           i = 0;
@@ -444,7 +444,7 @@ int main(int argc, char ** argv) {
   }
 
   /* Open FAT16 image file */
-  FILE * fd = fopen(argv[1], "rb");
+  FILE *fd = fopen(argv[1], "rb");
   if (!fd) {
     printf("%s: file not found\n", argv[1]);
     exit(0);
@@ -454,13 +454,13 @@ int main(int argc, char ** argv) {
   char ** path = path_treatment(argv[2], & pathSize);
 
   /* Initializing a FAT16 volume */
-  VOLUME * Vol = fat16_init(fd);
+  VOLUME *Vol = fat16_init(fd);
 
   /* Root directory */
   DIR_ENTRY Root;
 
   /* Searching in the root directory first */
-  find_root(fd, * Vol, Root, path, pathSize, 0);
+  find_root(fd, *Vol, Root, path, pathSize, 0);
 
   fclose(fd);
   return 0;
