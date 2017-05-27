@@ -1,5 +1,4 @@
 #include "sector.h"
-#include "fat16.h"
 
 /* Read the sector 'secnum' from the image to the buffer */
 void sector_read(FILE *fd, unsigned int secnum, void *buffer)
