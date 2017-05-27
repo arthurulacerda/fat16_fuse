@@ -1,5 +1,6 @@
 *.o
 *.img
+*.log
 mount_fat16
 a.out
 out

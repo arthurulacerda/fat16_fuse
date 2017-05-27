@@ -234,7 +234,7 @@ return format_path;
 
 VOLUME *fat16_init(FILE *fd) {
   VOLUME Fat16;
-  VOLUME *Vol = &Fat16;
+  VOLUME *Vol = malloc(sizeof *Vol);
   Vol->Fat = NULL;
 
   /* BPB */
