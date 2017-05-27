@@ -107,38 +107,38 @@ WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
 
 char** path_treatment(char* path_entry, int* pathsz){
 
- int pathsize = 1;
- int i,j;
- char letter = '0';
+  int pathsize = 1;
+  int i,j;
+  char letter = '0';
 
   // Counting number of files
- for(i = 0; path_entry[i] != '\0'; i++){
-  if(path_entry[i] == '/'){
-    if(path_entry[i+1] != '\0'){
-     pathsize++;
-   }
- }
-}
+  for (i = 0; path_entry[i] != '\0'; i++){
+    if (path_entry[i] == '/'){
+      if (path_entry[i+1] != '\0'){
+      	pathsize++;
+      }
+    }
+  }
 
-char** path = (char**) malloc (pathsize*sizeof(char*));
+  char** path = (char**) malloc (pathsize*sizeof(char*));
 
   // Dividing path names in separated file names
-const char token[2] = "/";
-char *slice;
+  const char token[2] = "/";
+  char *slice;
+  
+  i = 0;
 
-i = 0;
-
-slice = strtok(path_entry, token);
-while(i<pathsize){
-  path[i++] = slice;
+  slice = strtok(path_entry, token);
+  while(i<pathsize){
+    path[i++] = slice;
     //printf("\n\n%s\n\n",path[i-1]);
-  slice = strtok(NULL,token);
-}
-
-char ** format_path = (char**) malloc (pathsize*sizeof(char*));
-for(i = 0; i < pathsize; i++){
-  format_path[i] = (char*) malloc (11*sizeof(char));
-}
+    slice = strtok(NULL,token);
+  }
+  
+  char ** format_path = (char**) malloc (pathsize*sizeof(char*));
+  for (i = 0; i < pathsize; i++){
+    format_path[i] = (char*) malloc (11*sizeof(char));
+  }
 
 
   int name_size = 0; // Size of name field
@@ -147,37 +147,37 @@ for(i = 0; i < pathsize; i++){
   int dotflag = 0; // Verify if the dot character '.' has appeared.
 
   // Verifying if each directory is valid and formatting it for FAT
-  for(i = 0; i < pathsize; i++){
-  	for(j = 0, k = 0; ; j++, k++){
-  		if(path[i][j] == '.'){
+  for (i = 0; i < pathsize; i++){
+  	for (j = 0, k = 0; ; j++, k++){
+  		if (path[i][j] == '.'){
   			// Dir .
-  			if(j == 0 && path[i][j+1] == '\0'){
+  			if (j == 0 && path[i][j+1] == '\0'){
   				format_path[i][0] = '.';
-  				for(k = 1; k < 11; k++){
+  				for (k = 1; k < 11; k++){
   					format_path[i][k] = ' ';
   				}
   				break;
   			}
 
   			// Dir ..
-  			if(j == 0 && path[i][j+1] == '.' && path[i][j+2] == '\0'){
+  			if (j == 0 && path[i][j+1] == '.' && path[i][j+2] == '\0'){
   				format_path[i][0] = '.';
   				format_path[i][1] = '.';
-  				for(k = 2; k < 11; k++){
+  				for (k = 2; k < 11; k++){
   					format_path[i][k] = ' ';
   				}
   				break;
   			}
 
   			// Check ocurrency of past dot character.
-  			if(!dotflag){
-  				if(path[i][j+1] == '\0'){
+  			if (!dotflag){
+  				if (path[i][j+1] == '\0'){
   					printf("Error: Empty extension after dot character (.) inf file %s\n",path[i]);
   					exit(1);
   				}
 
   				dotflag = 1;
-  				for(;k < 8; k++){
+  				for (;k < 8; k++){
   					format_path[i][k] = ' ';
   				}
   				k = 7;
@@ -187,35 +187,35 @@ for(i = 0; i < pathsize; i++){
   			}
   		}
   		// End of file name
-  		else if(path[i][j] == '\0'){
-  			for(;k<11;k++){
+  		else if (path[i][j] == '\0'){
+  			for (;k<11;k++){
   				format_path[i][k] = ' ';
   			}
 
   			break;
   		}
   		// Lower case to Upper case
-  		else if(path[i][j] >= 'a' && path[i][j] <='z'){
+  		else if (path[i][j] >= 'a' && path[i][j] <='z'){
   			format_path[i][k] = path[i][j] - 32;
 
-  			if(name_size > 8 || ext_size > 3){
+  			if (name_size > 8 || ext_size > 3){
   				printf("Error: Overfill of name or extension field in file %s\n",path[i]);
   				exit(1);
   			}
   		}
   		// Other character accepted
-  		else if((path[i][j] >= 'A' && path[i][j] <='Z') || (path[i][j] >= '0' && path[i][j] <='9') || 
+  		else if ((path[i][j] >= 'A' && path[i][j] <='Z') || (path[i][j] >= '0' && path[i][j] <='9') || 
   			path[i][j] == '$' || path[i][j] == '%' || path[i][j] == '\'' || path[i][j] == '-' || path[i][j] == '_' ||
   			path[i][j] == '@' || path[i][j] == '~' || path[i][j] == '`' || path[i][j] == '!' || path[i][j] == '(' ||
   			path[i][j] == ')' || path[i][j] == '{' || path[i][j] == '}' || path[i][j] == '^' || path[i][j] == '#' ||
   			path[i][j] == '&'){
   			format_path[i][k] = path[i][j];
-     if(dotflag)
+     if (dotflag)
       ext_size++;
     else
       name_size++;
 
-    if(name_size > 8 || ext_size > 3){
+    if (name_size > 8 || ext_size > 3){
       printf("Error: Overfill of name or extension field in file %s\n",path[i]);
       exit(1);
     }
