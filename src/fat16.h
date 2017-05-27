@@ -4,7 +4,6 @@
 #define BYTES_PER_SECTOR 512
 
 #include <stdint.h>
-#include "sector.h"
 
 typedef uint8_t BYTE;
 typedef uint16_t WORD;

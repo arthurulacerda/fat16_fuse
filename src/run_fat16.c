@@ -1,4 +1,7 @@
+#include <stdint.h>
 #include <string.h>
+
+#include "sector.h"
 #include "fat16.h"
 
 void printBPB(BPB_BS Bpb) {
@@ -176,7 +179,6 @@ return format_path;
 }
 
 VOLUME *fat16_init(FILE *fd) {
-  VOLUME Fat16;
   VOLUME *Vol = malloc(sizeof *Vol);
 
   /* BPB */
