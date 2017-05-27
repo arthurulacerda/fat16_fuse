@@ -31,7 +31,7 @@ typedef struct {
   DWORD BS_VollID;
   BYTE BS_VollLab[11];
   BYTE BS_FilSysType[8];
-  BYTE Reserved[448];
+  BYTE Reserved2[448];
   WORD Signature_word;
 } __attribute__ ((packed)) BPB_BS;
 

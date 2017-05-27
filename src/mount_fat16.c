@@ -166,6 +166,8 @@ int main(int argc, char *argv[])
 {
   int ret;
 
+  log_open();
+
   /* Starting pre-initialization of a FAT16 volume */
   VOLUME *Vol = pre_init_fat16();
 

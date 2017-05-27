@@ -68,7 +68,7 @@ void printDIR(DIR_ENTRY Dir) {
  * ==================================================================================
  * Parameters
  * @fd: File descriptor.
- * @Vol: Structure that contains essential data about the File System (BPB, first 
+ * @Vol: Structure that contains essential data about the File System (BPB, first
  * sector of data and root section).
  * @CusterN: the Nth cluster of the data section.
 **/
@@ -109,7 +109,7 @@ char ** path_treatment(char * pathInput, int * pathSz) {
   }
 
   char ** path = (char ** ) malloc(pathSize * sizeof(char * ));
-  
+
   const char token[2] = "/";
   char * slice;
 
@@ -128,9 +128,9 @@ char ** path_treatment(char * pathInput, int * pathSz) {
   }
 
   int nameSize = 0;
-  int extensionSize = 0; 
+  int extensionSize = 0;
   int k;
-  int dotFlag = 0; 
+  int dotFlag = 0;
 
   /* Verifyies if each file of the path is valid input, and formats it for FAT16 */
   for (i = 0; i < pathSize; i++) {
@@ -138,7 +138,7 @@ char ** path_treatment(char * pathInput, int * pathSz) {
 
       /* When an '.' character is analysed */
       if (path[i][j] == '.') {
-        
+
         /* Verifies if it's . file */
         if (j == 0 && path[i][j + 1] == '\0') {
           pathFormatted[i][0] = '.';
@@ -181,8 +181,8 @@ char ** path_treatment(char * pathInput, int * pathSz) {
           exit(1);
         }
       }
-      
-      /* End of the file name, fills with ' ' character the rest of the file 
+
+      /* End of the file name, fills with ' ' character the rest of the file
        * name and the file extension fields */
       else if (path[i][j] == '\0') {
         for (; k < 11; k++) {
@@ -191,7 +191,7 @@ char ** path_treatment(char * pathInput, int * pathSz) {
 
         break;
       }
-      
+
       /* Turns lower case characters into upper case characters */
       else if (path[i][j] >= 'a' && path[i][j] <= 'z') {
         pathFormatted[i][k] = path[i][j] - 32;
@@ -240,7 +240,7 @@ char ** path_treatment(char * pathInput, int * pathSz) {
  * Reads BPB, calculates the first sector of the root and data sections.
  * ==================================================================================
  * Return
- * @Vol: Structure that contains essential data about the File System (BPB, first 
+ * @Vol: Structure that contains essential data about the File System (BPB, first
  * sector of data and root section).
  * ==================================================================================
  * Parameters
@@ -275,7 +275,7 @@ VOLUME * fat16_init(FILE * fd) {
  * ==================================================================================
  * Parameters
  * @fd: File descriptor.
- * @Vol: Structure that contains essential data about the File System (BPB, first 
+ * @Vol: Structure that contains essential data about the File System (BPB, first
  * sector of data and root section).
  * @Root: Variable that will store directory entries in root.
  * @path: Path organized in an array of files names.
@@ -347,7 +347,7 @@ void find_root(FILE * fd, VOLUME Vol, DIR_ENTRY Root, char ** path, int pathSize
  * ==================================================================================
  * Parameters
  * @fd: File descriptor.
- * @Vol: Structure that contains essential data about the File System (BPB, first 
+ * @Vol: Structure that contains essential data about the File System (BPB, first
  * sector of data and root section).
  * @Dir: Variable that will store directory entries the subdirectory.
  * @path: Path organized in an array of files names.
@@ -382,7 +382,7 @@ void find_subdir(FILE * fd, VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSiz
       }
     }
 
-    /* If the last file of the path is located in this 
+    /* If the last file of the path is located in this
      * directory stop searching */
     if ((cmpstring && Dir.DIR_Attr == 0x20 && pathDepth + 1 == pathSize) ||
       (cmpstring && Dir.DIR_Attr == 0x10 && pathDepth + 1 == pathSize)) {
