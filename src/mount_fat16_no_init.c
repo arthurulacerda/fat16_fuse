@@ -106,8 +106,7 @@ void *fat16_init(struct fuse_conn_info *conn)
 {
   log_msg("Chamando init\n");
 
-  /* Starting pre-initialization of a FAT16 volume */
-  VOLUME *Vol = pre_init_fat16();
+  // Your code here 
 
   return NULL;
 }
@@ -134,7 +133,10 @@ int main(int argc, char *argv[])
 
   log_open();
 
-  ret = fuse_main(argc, argv, &fat16_oper, NULL);
+  /* Starting pre-initialization of a FAT16 volume */
+  VOLUME *Vol = pre_init_fat16();
+
+  ret = fuse_main(argc, argv, &fat16_oper, Vol);
 
   log_msg("ret: %d\n", ret);
 
