@@ -107,38 +107,38 @@ WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, DIR_ENTRY Dir, WORD ClusterN) {
 
 char** path_treatment(char* path_entry, int* pathsz){
 
-  int pathsize = 1;
-  int i,j;
-  char letter = '0';
+ int pathsize = 1;
+ int i,j;
+ char letter = '0';
 
   // Counting number of files
-  for(i = 0; path_entry[i] != '\0'; i++){
-    if(path_entry[i] == '/'){
-      if(path_entry[i+1] != '\0'){
-      	pathsize++;
-      }
-    }
-  }
+ for(i = 0; path_entry[i] != '\0'; i++){
+  if(path_entry[i] == '/'){
+    if(path_entry[i+1] != '\0'){
+     pathsize++;
+   }
+ }
+}
 
-  char** path = (char**) malloc (pathsize*sizeof(char*));
+char** path = (char**) malloc (pathsize*sizeof(char*));
 
   // Dividing path names in separated file names
-  const char token[2] = "/";
-  char *slice;
-  
-  i = 0;
+const char token[2] = "/";
+char *slice;
 
-  slice = strtok(path_entry, token);
-  while(i<pathsize){
-    path[i++] = slice;
+i = 0;
+
+slice = strtok(path_entry, token);
+while(i<pathsize){
+  path[i++] = slice;
     //printf("\n\n%s\n\n",path[i-1]);
-    slice = strtok(NULL,token);
-  }
-  
-  char ** format_path = (char**) malloc (pathsize*sizeof(char*));
-  for(i = 0; i < pathsize; i++){
-    format_path[i] = (char*) malloc (11*sizeof(char));
-  }
+  slice = strtok(NULL,token);
+}
+
+char ** format_path = (char**) malloc (pathsize*sizeof(char*));
+for(i = 0; i < pathsize; i++){
+  format_path[i] = (char*) malloc (11*sizeof(char));
+}
 
 
   int name_size = 0; // Size of name field
@@ -210,26 +210,26 @@ char** path_treatment(char* path_entry, int* pathsz){
   			path[i][j] == ')' || path[i][j] == '{' || path[i][j] == '}' || path[i][j] == '^' || path[i][j] == '#' ||
   			path[i][j] == '&'){
   			format_path[i][k] = path[i][j];
-  			if(dotflag)
-  				ext_size++;
-  			else
-  				name_size++;
+     if(dotflag)
+      ext_size++;
+    else
+      name_size++;
 
-  			if(name_size > 8 || ext_size > 3){
-  				printf("Error: Overfill of name or extension field in file %s\n",path[i]);
-  				exit(1);
-  			}
-  		}
-  		else{
-  			printf("Error: Character not accepted in file %s\n",path[i]);
-  			exit(1);
-  		}
+    if(name_size > 8 || ext_size > 3){
+      printf("Error: Overfill of name or extension field in file %s\n",path[i]);
+      exit(1);
     }
   }
+  else{
+   printf("Error: Character not accepted in file %s\n",path[i]);
+   exit(1);
+ }
+}
+}
 
-  *pathsz = pathsize;
-  free(path);
-  return format_path;
+*pathsz = pathsize;
+free(path);
+return format_path;
 }
 
 VOLUME *fat16_init(FILE *fd) {
@@ -246,17 +246,17 @@ VOLUME *fat16_init(FILE *fd) {
 
   /* Number of sectors in the root directory */
   DWORD RootDirSectors = ((Vol->Bpb.BPB_RootEntCnt * 32) +
-      (Vol->Bpb.BPB_BytsPerSec - 1)) / Vol->Bpb.BPB_BytsPerSec;
+    (Vol->Bpb.BPB_BytsPerSec - 1)) / Vol->Bpb.BPB_BytsPerSec;
 
   /* First sector of the data region (cluster #2) */
   Vol->FirstDataSector = Vol->Bpb.BPB_RsvdSecCnt + (Vol->Bpb.BPB_NumFATS *
-      Vol->Bpb.BPB_FATSz16) + RootDirSectors;
+    Vol->Bpb.BPB_FATSz16) + RootDirSectors;
 
   return Vol;
 }
 
 void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char **path, int pathdepth,
-               int pathsize) {
+ int pathsize) {
   /* Buffer to store bytes from sector_read */
   BYTE buffer[BYTES_PER_SECTOR];
 
@@ -286,7 +286,7 @@ void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char **path, int pathdepth,
     if (cmpstring && Root.DIR_Attr == 0x20) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
       printDIR(Root);
-    	exit(0);
+      exit(0);
     }
 
     /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
@@ -294,7 +294,7 @@ void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char **path, int pathdepth,
     if (cmpstring && Root.DIR_Attr == 0x10 && pathsize == pathdepth + 1) {
     	printf("Found the file %s in the root directory!\n", Root.DIR_Name);
       printDIR(Root);
-    	exit(0);
+      exit(0);
     }
 
     /* If the first level of the path is a directory, continue searching
@@ -313,7 +313,7 @@ void find_root(FILE *fd, VOLUME Vol, DIR_ENTRY Root, char **path, int pathdepth,
 }
 
 void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
-                 int pathdepth, int currentdepth) {
+ int pathdepth, int currentdepth) {
   if (currentdepth == 0) {
     find_root(fd, Vol, Dir, path, pathdepth, pathsize);
   }
@@ -342,45 +342,45 @@ void find_subdir(FILE *fd, VOLUME Vol, DIR_ENTRY Dir, char **path, int pathsize,
      * directory or if the current path is a directory finishes in this
      * directory, stop searching */
     if ((cmpstring && Dir.DIR_Attr == 0x20) ||
-        (cmpstring && Dir.DIR_Attr == 0x10 && pathdepth + 1 == pathsize)) {
+      (cmpstring && Dir.DIR_Attr == 0x10 && pathdepth + 1 == pathsize)) {
       printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
-          path[pathdepth - 1]);
-      exit(0);
-    }
+        path[pathdepth - 1]);
+    exit(0);
+  }
 
-    if (cmpstring && Dir.DIR_Attr == 0x10) {
+  if (cmpstring && Dir.DIR_Attr == 0x10) {
       //printDIR(Dir);
-      if (path[pathdepth][0] == '.' && path[pathdepth][1] == '.') {
-        currentdepth--;
-      } else {
-        currentdepth++;
-      }
-      find_subdir(fd, Vol, Dir, path, pathsize, pathdepth + 1, currentdepth);
+    if (path[pathdepth][0] == '.' && path[pathdepth][1] == '.') {
+      currentdepth--;
+    } else {
+      currentdepth++;
     }
+    find_subdir(fd, Vol, Dir, path, pathsize, pathdepth + 1, currentdepth);
+  }
 
-    if (i % 16 == 0) {
-      printf("%d\n", i);
-      if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
-        sector_read(fd, FirstSectorofCluster + DirSecCnt, &buffer);
-        DirSecCnt++;
-      } else {
+  if (i % 16 == 0) {
+    printf("%d\n", i);
+    if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
+      sector_read(fd, FirstSectorofCluster + DirSecCnt, &buffer);
+      DirSecCnt++;
+    } else {
         // End of cluster
         // Search for the next cluster
-        if (FatClusEntryVal == 0xffff) {
-          printf("%s: file not found\n", path[pathdepth]);
-          exit(0);
-        } else if (FatClusEntryVal >= 0x0002) {
-          printf("%x\n", FatClusEntryVal);
-          ClusterN = FatClusEntryVal;
-          FatClusEntryVal = fat_entry_by_cluster(fd, &Vol, Dir, ClusterN);
-          FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
-          sector_read(fd, FirstSectorofCluster, &buffer);
-          i = 0;
-          DirSecCnt = 1;
-        }
+      if (FatClusEntryVal == 0xffff) {
+        printf("%s: file not found\n", path[pathdepth]);
+        exit(0);
+      } else if (FatClusEntryVal >= 0x0002) {
+        printf("%x\n", FatClusEntryVal);
+        ClusterN = FatClusEntryVal;
+        FatClusEntryVal = fat_entry_by_cluster(fd, &Vol, Dir, ClusterN);
+        FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+        sector_read(fd, FirstSectorofCluster, &buffer);
+        i = 0;
+        DirSecCnt = 1;
       }
     }
   }
+}
 }
 
 int main(int argc, char **argv) {
