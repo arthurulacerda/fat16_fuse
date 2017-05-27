@@ -51,7 +51,6 @@ typedef struct {
 typedef struct {
   DWORD FirstRootDirSecNum;
   DWORD FirstDataSector;
-  BYTE *Fat;
   BPB_BS Bpb;
 } VOLUME;
 
@@ -235,7 +234,6 @@ return format_path;
 VOLUME *fat16_init(FILE *fd) {
   VOLUME Fat16;
   VOLUME *Vol = malloc(sizeof *Vol);
-  Vol->Fat = NULL;
 
   /* BPB */
   sector_read(fd, 0, &Vol->Bpb);
