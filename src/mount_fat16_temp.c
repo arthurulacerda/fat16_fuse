@@ -37,7 +37,7 @@ typedef struct {
   DWORD BS_VollID;
   BYTE BS_VollLab[11];
   BYTE BS_FilSysType[8];
-  BYTE Reserved[448];
+  BYTE Reserved2[448];
   WORD Signature_word;
 } __attribute__ ((packed)) BPB_BS;
 
@@ -106,7 +106,8 @@ void *fat16_init(struct fuse_conn_info *conn)
 {
   log_msg("Chamando init\n");
 
-  // Your code here 
+  /* Starting pre-initialization of a FAT16 volume */
+  VOLUME *Vol = pre_init_fat16();
 
   return NULL;
 }
@@ -133,10 +134,7 @@ int main(int argc, char *argv[])
 
   log_open();
 
-  /* Starting pre-initialization of a FAT16 volume */
-  VOLUME *Vol = pre_init_fat16();
-
-  ret = fuse_main(argc, argv, &fat16_oper, Vol);
+  ret = fuse_main(argc, argv, &fat16_oper, NULL);
 
   log_msg("ret: %d\n", ret);
 
