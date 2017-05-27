@@ -381,42 +381,53 @@ void find_subdir(FILE * fd, VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSiz
         break;
       }
     }
-    /* If the path is only one file (ATTR_ARCHIVE) and it is located in this
-     * directory or if the current path is a directory finishes in this
-     * directory, stop searching */
-    if ((cmpstring && Dir.DIR_Attr == 0x20) ||
+
+    /* If the last file of the path is located in this 
+     * directory stop searching */
+    if ((cmpstring && Dir.DIR_Attr == 0x20 && pathDepth + 1 == pathSize) ||
       (cmpstring && Dir.DIR_Attr == 0x10 && pathDepth + 1 == pathSize)) {
       printf("Found the file %s in the %s directory!\n", Dir.DIR_Name,
         path[pathDepth - 1]);
       exit(0);
     }
 
+    /* If the directory has been found and it isn't the last file */
     if (cmpstring && Dir.DIR_Attr == 0x10) {
-      //printDIR(Dir);
+      /* If the file is .., then the rootDepth decreases and search continues*/
       if (path[pathDepth][0] == '.' && path[pathDepth][1] == '.') {
         rootDepth--;
-      } else {
+      /* If the file isn't ., then the root Depth increases. */
+      } else if (path[pathDepth][0] != '.'){
         rootDepth++;
       }
+      /* If it's the . file, then the root depth remains the same, anyways
+       * the pathDepth increases by one and the function is called again in
+       * recursion. */
       find_subdir(fd, Vol, Dir, path, pathSize, pathDepth + 1, rootDepth);
     }
 
+    /* A sector needs to be readed 16 times by the buffer to reach the end. */
     if (i % 16 == 0) {
       printf("%d\n", i);
+      /* If there are still sector to be readen in the cluster, read the next sector. */
       if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
         sector_read(fd, FirstSectorofCluster + DirSecCnt, & buffer);
         DirSecCnt++;
+      /* Reaches the end of the cluster */
       } else {
-        // End of cluster
-        // Search for the next cluster
+        /* Checks if there isn't a cluster to continue to read*/
         if (FatClusEntryVal == 0xffff) {
           printf("%s: file not found\n", path[pathDepth]);
           exit(0);
+        /* If there is a cluster to continue reading */
         } else if (FatClusEntryVal >= 0x0002) {
-          printf("%x\n", FatClusEntryVal);
+          /* Update the cluster number */
           ClusterN = FatClusEntryVal;
+          /* Update the fat entry */
           FatClusEntryVal = fat_entry_by_cluster(fd, & Vol, ClusterN);
+          /* Calculates the first sector of the cluster */
           FirstSectorofCluster = ((ClusterN - 2) * Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+          /* Read it, and then continue */
           sector_read(fd, FirstSectorofCluster, & buffer);
           i = 0;
           DirSecCnt = 1;
