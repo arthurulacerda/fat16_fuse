@@ -37,7 +37,7 @@ typedef struct {
   DWORD BS_VollID;
   BYTE BS_VollLab[11];
   BYTE BS_FilSysType[8];
-  BYTE Reserved[448];
+  BYTE Reserved2[448];
   WORD Signature_word;
 } __attribute__ ((packed)) BPB_BS;
 
@@ -72,14 +72,14 @@ VOLUME *pre_init_fat16(void)
 
   if (fd == NULL) {
     log_msg("Missing FAT16 image file!\n");
-    exit(0);
+    exit(EXIT_FAILURE);
   }
 
   VOLUME *Vol = malloc(sizeof *Vol);
 
   if (Vol == NULL) {
     log_msg("Out of memory!\n");
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 
   /* Reads the BPB */
@@ -106,8 +106,9 @@ void *fat16_init(struct fuse_conn_info *conn)
 {
   log_msg("Chamando init\n");
 
-  /* Starting pre-initialization of a FAT16 volume */
-  VOLUME *Vol = pre_init_fat16();
+  // Your code here 
+  struct fuse_context *context;
+  context = fuse_get_context();
 
   return NULL;
 }
@@ -119,11 +120,44 @@ void fat16_destroy(void *data)
   // Your code here
 }
 
+int fat16_getattr(const char *path, struct stat *stbuf)
+{
+  log_msg("calling getattr: %s\n", path);
+  return 0;
+}
+
+int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
+                  off_t offset, struct fuse_file_info *fi)
+{
+  int i;
+  log_msg("calling readdir: %s", path);
+  return 0;
+}
+
+int fat16_open(const char *path, struct fuse_file_info *fi)
+{
+  int i;
+  log_msg("calling open: %s", path);
+  return 0;
+}
+
+int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
+               struct fuse_file_info *fi)
+{
+  int i;
+  log_msg("calling read: %s", path);
+  return 0;
+}
+
 //------------------------------------------------------------------------------
 
 struct fuse_operations fat16_oper = {
   .init       = fat16_init,
-  .destroy    = fat16_destroy
+  .destroy    = fat16_destroy,
+  .getattr    = fat16_getattr,
+  .readdir    = fat16_readdir,
+  .open       = fat16_open,
+  .read       = fat16_read
 };
 
 //------------------------------------------------------------------------------
@@ -132,9 +166,10 @@ int main(int argc, char *argv[])
 {
   int ret;
 
-  log_open();
+  /* Starting pre-initialization of a FAT16 volume */
+  VOLUME *Vol = pre_init_fat16();
 
-  ret = fuse_main(argc, argv, &fat16_oper, NULL);
+  ret = fuse_main(argc, argv, &fat16_oper, Vol);
 
   log_msg("ret: %d\n", ret);
 
