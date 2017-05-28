@@ -1,7 +1,6 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
-#include <dirent.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -63,7 +62,6 @@ typedef struct {
   DWORD FirstDataSector;
   BPB_BS Bpb;
 } VOLUME;
-
 
 DIR_ENTRY find_root(VOLUME, DIR_ENTRY, char**, int, int);
 DIR_ENTRY find_subdir(VOLUME, DIR_ENTRY, char**, int, int, int);
@@ -311,6 +309,23 @@ char ** path_treatment(char *pathInput, int *pathSz) {
   return pathFormatted;
 }
 
+char *path_decode(char *path) {
+  char *pathDecoded = malloc(12 * sizeof(char));
+  int i, j;
+  for (i = 0, j = 0; path[i] != '\0'; i++) {
+    if (path[i] != ' ') {
+      if (i != 8) {
+        pathDecoded[j++] = path[i] + 32;
+      } else {
+        pathDecoded[j++] = '.';
+        pathDecoded[j++] = path[i] + 32;
+      }
+    }
+  }
+  pathDecoded[j] = '\0';
+  return pathDecoded;
+}
+
 /**
  * Browse directory entries in root directory.
  * ==================================================================================
@@ -487,46 +502,42 @@ char ** path_treatment(char *pathInput, int *pathSz) {
 //  }
 //}
 
-//DIR_ENTRY *readdir(VOLUME Vol)
-//{
-//  /* Buffer to store bytes from sector_read */
-//  BYTE buffer[BYTES_PER_SECTOR];
-//
-//  DIR_ENTRY *Root;
-//
-//  sector_read(Vol.fd, Vol.FirstRootDirSecNum, & buffer);
-//
-//  int RootDirCnt = 1, i, j, cmpstring = 1;
-//  for (i = 1; i <= Vol.Bpb.BPB_RootEntCnt; i++) {
-//    memcpy(Root, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
-//
-//    if (i == 1 || i == 2) {
-//      return Root;
-//    }
-//
-//    if (Root->DIR_Name[0] == 0x00) {
-//      return NULL;
-//    }
-//
-//    if (Root->DIR_Attr == 0x20) {
-//      printDIR(*Root);
-//      return Root;
-//    }
-//
-//    if (Root->DIR_Attr == 0x10) {
-//      printDIR(*Root);
-//      return Root;
-//    }
-//
-//    /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
-//     * Read next sector */
-//    if (i % 16 == 0 && i != Vol.Bpb.BPB_RootEntCnt) {
-//      sector_read(Vol.fd, Vol.FirstRootDirSecNum + RootDirCnt, & buffer);
-//      RootDirCnt++;
-//    }
-//  }
-//  return NULL;
-//}
+DIR_ENTRY *readdir(VOLUME Vol)
+{
+  /* Buffer to store bytes from sector_read */
+  BYTE buffer[BYTES_PER_SECTOR];
+
+  DIR_ENTRY *Root;
+
+  sector_read(Vol.fd, Vol.FirstRootDirSecNum, & buffer);
+
+  int RootDirCnt = 1, i, j, cmpstring = 1;
+  for (i = 1; i <= Vol.Bpb.BPB_RootEntCnt; i++) {
+    memcpy(Root, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+
+    if (Root->DIR_Name[0] == 0x00) {
+      return NULL;
+    }
+
+    if (Root->DIR_Attr == 0x20) {
+      //printDIR(*Root);
+      return Root;
+    }
+
+    if (Root->DIR_Attr == 0x10) {
+      //printDIR(*Root);
+      return Root;
+    }
+
+    /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
+     * Read next sector */
+    if (i % 16 == 0 && i != Vol.Bpb.BPB_RootEntCnt) {
+      sector_read(Vol.fd, Vol.FirstRootDirSecNum + RootDirCnt, & buffer);
+      RootDirCnt++;
+    }
+  }
+  return NULL;
+}
 
 //------------------------------------------------------------------------------
 
@@ -574,20 +585,19 @@ int fat16_getattr(const char *path, struct stat *stbuf)
     stbuf->st_size = 0;
     stbuf->st_blocks = 0;
     stbuf->st_ctime = stbuf->st_atime = stbuf->st_mtime = 0;
-  }
-  //} else {
-  //  DIR_ENTRY *file = readdir(*Vol);
+  } else {
+    DIR_ENTRY *file = readdir(*Vol);
 
-  //  if (file != NULL) {
-  //    if (file->DIR_Attr == 0x10) {
-  //      stbuf->st_mode = S_IFDIR | 0755;
-  //    } else {
-  //      stbuf->st_mode = S_IFREG | 0444;
-  //    }
-  //    stbuf->st_size = file->DIR_FileSize;
-  //    stbuf->st_blocks = (stbuf->st_size / stbuf->st_blksize);
-  //  }
-  //}
+    if (file != NULL) {
+      if (file->DIR_Attr == 0x10) {
+        stbuf->st_mode = S_IFDIR | 0755;
+      } else {
+        stbuf->st_mode = S_IFREG | 0444;
+      }
+      stbuf->st_size = file->DIR_FileSize;
+      stbuf->st_blocks = (stbuf->st_size / stbuf->st_blksize);
+    }
+  }
   return 0;
 }
 
@@ -618,12 +628,12 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
     }
 
     if (Root.DIR_Attr == 0x20) {
-      const char *filename = strdup(Root.DIR_Name);
+      const char *filename = strdup(path_decode(Root.DIR_Name));
       filler(buffer, filename, NULL, 0);
     }
 
     if (Root.DIR_Attr == 0x10) {
-      const char *filename = strdup(Root.DIR_Name);
+      const char *filename = strdup(path_decode(Root.DIR_Name));
       filler(buffer, filename, NULL, 0);
     }
 
