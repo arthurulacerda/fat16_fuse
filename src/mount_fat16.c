@@ -145,15 +145,15 @@ VOLUME *pre_init_fat16(void)
  * sector of data and root section).
  * @CusterN: the Nth cluster of the data section.
 **/
-//WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, WORD ClusterN) {
-//  BYTE FatBuffer[BYTES_PER_SECTOR];
-//  WORD FATOffset = ClusterN * 2;
-//  WORD FatSecNum = Vol -> Bpb.BPB_RsvdSecCnt + (FATOffset / Vol -> Bpb.BPB_BytsPerSec);
-//  WORD FatEntOffset = FATOffset % Vol -> Bpb.BPB_BytsPerSec;
-//  sector_read(fd, FatSecNum, & FatBuffer);
-//  return *((WORD *) & FatBuffer[FatEntOffset]);
-//}
-//
+WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, WORD ClusterN) {
+  BYTE FatBuffer[BYTES_PER_SECTOR];
+  WORD FATOffset = ClusterN * 2;
+  WORD FatSecNum = Vol -> Bpb.BPB_RsvdSecCnt + (FATOffset / Vol -> Bpb.BPB_BytsPerSec);
+  WORD FatEntOffset = FATOffset % Vol -> Bpb.BPB_BytsPerSec;
+  sector_read(fd, FatSecNum, & FatBuffer);
+  return *((WORD *) & FatBuffer[FatEntOffset]);
+}
+
 /**
  * This function recieves the string given by user input and divides it into an array
  * of strings, with the format of FAT16.
@@ -312,7 +312,7 @@ char ** path_treatment(char *pathInput, int *pathSz) {
 char *path_decode(char *path) {
   char *pathDecoded = malloc(12 * sizeof(char));
   int i, j;
-  for (i = 0, j = 0; path[i] != '\0'; i++) {
+  for (i = 0, j = 0; path[i + 1] != '\0'; i++) {
     if (path[i] != ' ') {
       if (i != 8) {
         pathDecoded[j++] = path[i] + 32;
@@ -340,167 +340,164 @@ char *path_decode(char *path) {
  * @pathSize: Number of files in the path.
  * @pathDepth: Depth, or index, o the current file of the path.
 **/
-//DIR_ENTRY *find_root(VOLUME Vol, DIR_ENTRY Root, char ** path, int pathSize, int pathDepth)
-//{
-//  /* Buffer to store bytes from sector_read */
-//  BYTE buffer[BYTES_PER_SECTOR];
-//
-//  sector_read(Vol.fd, Vol.FirstRootDirSecNum, & buffer);
-//
-//  int RootDirCnt = 1, i, j, cmpstring = 1;
-//  for (i = 1; i <= Vol.Bpb.BPB_RootEntCnt; i++) {
-//    memcpy( & Root, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
-//
-//    /* If the directory entry is free, all the next directory entries are also
-//     * free. So this file/directory could not be found */
-//    if (Root.DIR_Name[0] == 0x00) {
-//      exit(0);
-//    }
-//
-//    /* Comparing strings character by character */
-//    cmpstring = 1;
-//    for (j = 0; j < 11; j++) {
-//      if (Root.DIR_Name[j] != path[pathDepth][j]) {
-//        cmpstring = 0;
-//        break;
-//      }
-//    }
-//
-//    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
-//     * root directory, stop searching */
-//    if (cmpstring && Root.DIR_Attr == 0x20) {
-//      log_msg("Found the file %s in the root directory!\n", Root.DIR_Name);
-//      return Root;
-//      //printDIR(Root);
-//      //exit(0);
-//    }
-//
-//    /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
-//     * the root directory, stop searching */
-//    if (cmpstring && Root.DIR_Attr == 0x10 && pathSize == pathDepth + 1) {
-//      log_msg("Found the file %s in the root directory!\n", Root.DIR_Name);
-//      return Root;
-//      //printDIR(Root);
-//      //exit(0);
-//    }
-//
-//    /* If the first level of the path is a directory, continue searching
-//     * in the root's sub-directories */
-//    if (cmpstring && Root.DIR_Attr == 0x10) {
-//      find_subdir(Vol, Root, path, pathSize, pathDepth + 1, 1);
-//    }
-//
-//    /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
-//     * Read next sector */
-//    if (i % 16 == 0 && i != Vol.Bpb.BPB_RootEntCnt) {
-//      sector_read(Vol.fd, Vol.FirstRootDirSecNum + RootDirCnt, & buffer);
-//      RootDirCnt++;
-//    }
-//  }
-//}
-//
-///**
-// * Browse directory entries in a subdirectory.
-// * ==================================================================================
-// * Return
-// * There is no return in this funcion.
-// * ==================================================================================
-// * Parameters
-// * @Vol: Structure that contains essential data about the File System (BPB, first
-// * sector of data and root section).
-// * @Dir: Variable that will store directory entries the subdirectory.
-// * @path: Path organized in an array of files names.
-// * @pathSize: Number of files in the path.
-// * @pathDepth: Depth, or index, o the current file of the path.
-// * @rootDepth: Depth to the root.
-//**/
-//DIR_ENTRY find_subdir(VOLUME Vol, DIR_ENTRY Dir, char ** path, int pathSize,
-//  int pathDepth, int rootDepth) {
-//  if (rootDepth == 0) {
-//    find_root(Vol, Dir, path, pathSize, pathDepth);
-//  }
-//  int i, j, DirSecCnt = 1, cmpstring;
-//  BYTE buffer[BYTES_PER_SECTOR];
-//
-//  WORD ClusterN = Dir.DIR_FstClusLO;
-//  WORD FatClusEntryVal = fat_entry_by_cluster(Vol.fd, & Vol, ClusterN);
-//
-//  /* First sector of any valid cluster */
-//  WORD FirstSectorofCluster = ((ClusterN - 2) *Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
-//
-//  sector_read(Vol.fd, FirstSectorofCluster, & buffer);
-//  for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
-//    memcpy( & Dir, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
-//
-//    /* Comparing strings */
-//    cmpstring = 1;
-//    for (j = 0; j < 11; j++) {
-//      if (Dir.DIR_Name[j] != path[pathDepth][j]) {
-//        cmpstring = 0;
-//        break;
-//      }
-//    }
-//
-//    /* If the last file of the path is located in this
-//     * directory stop searching */
-//    if ((cmpstring && Dir.DIR_Attr == 0x20 && pathDepth + 1 == pathSize) ||
-//        (cmpstring && Dir.DIR_Attr == 0x10 && pathDepth + 1 == pathSize)) {
-//      log_msg("Found the file %s in the %s directory!\n", Dir.DIR_Name,
-//              path[pathDepth - 1]);
-//      return Dir;
-//    }
-//
-//    /* If the directory has been found and it isn't the last file */
-//    if (cmpstring && Dir.DIR_Attr == 0x10) {
-//
-//      /* If the file is .., then the rootDepth decreases and search continues*/
-//      if (path[pathDepth][0] == '.' && path[pathDepth][1] == '.') {
-//        rootDepth--;
-//
-//      /* If the file isn't ., then the root Depth increases. */
-//      } else if (path[pathDepth][0] != '.'){
-//        rootDepth++;
-//      }
-//      /* If it's the . file, then the root depth remains the same, anyways
-//       * the pathDepth increases by one and the function is called again in
-//       * recursion. */
-//      find_subdir(Vol, Dir, path, pathSize, pathDepth + 1, rootDepth);
-//    }
-//
-//    /* A sector needs to be readed 16 times by the buffer to reach the end. */
-//    if (i % 16 == 0) {
-//
-//      /* If there are still sector to be readen in the cluster, read the next sector. */
-//      if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
-//        sector_read(Vol.fd, FirstSectorofCluster + DirSecCnt, & buffer);
-//        DirSecCnt++;
-//      /* Reaches the end of the cluster */
-//      } else {
-//        /* Checks if there isn't a cluster to continue to read*/
-//        if (FatClusEntryVal == 0xffff) {
-//          log_msg("%s: file not found\n", path[pathDepth]);
-//          exit(EXIT_FAILURE);
-//
-//        /* If there is a cluster to continue reading */
-//        } else if (FatClusEntryVal >= 0x0002) {
-//          /* Update the cluster number */
-//          ClusterN = FatClusEntryVal;
-//
-//          /* Update the fat entry */
-//          FatClusEntryVal = fat_entry_by_cluster(Vol.fd, & Vol, ClusterN);
-//
-//          /* Calculates the first sector of the cluster */
-//          FirstSectorofCluster = ((ClusterN - 2) *Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
-//
-//          /* Read it, and then continue */
-//          sector_read(Vol.fd, FirstSectorofCluster, & buffer);
-//          i = 0;
-//          DirSecCnt = 1;
-//        }
-//      }
-//    }
-//  }
-//}
+int find_root(VOLUME Vol, DIR_ENTRY *Root, char ** path, int pathSize, int pathDepth)
+{
+  /* Buffer to store bytes from sector_read */
+  BYTE buffer[BYTES_PER_SECTOR];
+
+  sector_read(Vol.fd, Vol.FirstRootDirSecNum, & buffer);
+
+  int RootDirCnt = 1, i, j, cmpstring = 1;
+  for (i = 1; i <= Vol.Bpb.BPB_RootEntCnt; i++) {
+    memcpy(Root, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+
+    /* If the directory entry is free, all the next directory entries are also
+     * free. So this file/directory could not be found */
+    if (Root->DIR_Name[0] == 0x00) {
+      return 1;
+    }
+
+    /* Comparing strings character by character */
+    cmpstring = 1;
+    for (j = 0; j < 11; j++) {
+      if (Root->DIR_Name[j] != path[pathDepth][j]) {
+        cmpstring = 0;
+        break;
+      }
+    }
+
+    /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
+     * root directory, stop searching */
+    if (cmpstring && Root->DIR_Attr == 0x20) {
+      printDIR(Root);
+      return 0;
+    }
+
+    /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
+     * the root directory, stop searching */
+    if (cmpstring && Root->DIR_Attr == 0x10 && pathSize == pathDepth + 1) {
+      printDIR(Root);
+      return 0;
+    }
+
+    /* If the first level of the path is a directory, continue searching
+     * in the root's sub-directories */
+    if (cmpstring && Root->DIR_Attr == 0x10) {
+      find_subdir(Vol, Root, path, pathSize, pathDepth + 1, 1);
+    }
+
+    /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
+     * Read next sector */
+    if (i % 16 == 0 && i != Vol.Bpb.BPB_RootEntCnt) {
+      sector_read(Vol.fd, Vol.FirstRootDirSecNum + RootDirCnt, & buffer);
+      RootDirCnt++;
+    }
+  }
+}
+
+/**
+ * Browse directory entries in a subdirectory.
+ * ==================================================================================
+ * Return
+ * There is no return in this funcion.
+ * ==================================================================================
+ * Parameters
+ * @Vol: Structure that contains essential data about the File System (BPB, first
+ * sector of data and root section).
+ * @Dir: Variable that will store directory entries the subdirectory.
+ * @path: Path organized in an array of files names.
+ * @pathSize: Number of files in the path.
+ * @pathDepth: Depth, or index, o the current file of the path.
+ * @rootDepth: Depth to the root.
+**/
+int find_subdir(VOLUME Vol, DIR_ENTRY *Dir, char ** path, int pathSize,
+                       int pathDepth, int rootDepth)
+{
+  if (rootDepth == 0) {
+    find_root(Vol, Dir, path, pathSize, pathDepth);
+  }
+  int i, j, DirSecCnt = 1, cmpstring;
+  BYTE buffer[BYTES_PER_SECTOR];
+
+  WORD ClusterN = Dir->DIR_FstClusLO;
+  WORD FatClusEntryVal = fat_entry_by_cluster(Vol.fd, & Vol, ClusterN);
+
+  /* First sector of any valid cluster */
+  WORD FirstSectorofCluster = ((ClusterN - 2) *Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+
+  sector_read(Vol.fd, FirstSectorofCluster, & buffer);
+  for (i = 1; Dir->DIR_Name[0] != 0x00; i++) {
+    memcpy(Dir, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+
+    /* Comparing strings */
+    cmpstring = 1;
+    for (j = 0; j < 11; j++) {
+      if (Dir->DIR_Name[j] != path[pathDepth][j]) {
+        cmpstring = 0;
+        break;
+      }
+    }
+
+    /* If the last file of the path is located in this
+     * directory stop searching */
+    if ((cmpstring && Dir->DIR_Attr == 0x20 && pathDepth + 1 == pathSize) ||
+        (cmpstring && Dir->DIR_Attr == 0x10 && pathDepth + 1 == pathSize)) {
+      printDIR(*Dir);
+      return 0;
+    }
+
+    /* If the directory has been found and it isn't the last file */
+    if (cmpstring && Dir->DIR_Attr == 0x10) {
+
+      /* If the file is .., then the rootDepth decreases and search continues*/
+      if (path[pathDepth][0] == '.' && path[pathDepth][1] == '.') {
+        rootDepth--;
+
+      /* If the file isn't ., then the root Depth increases. */
+      } else if (path[pathDepth][0] != '.'){
+        rootDepth++;
+      }
+      /* If it's the . file, then the root depth remains the same, anyways
+       * the pathDepth increases by one and the function is called again in
+       * recursion. */
+      find_subdir(Vol, Dir, path, pathSize, pathDepth + 1, rootDepth);
+    }
+
+    /* A sector needs to be readed 16 times by the buffer to reach the end. */
+    if (i % 16 == 0) {
+
+      /* If there are still sector to be readen in the cluster, read the next sector. */
+      if (DirSecCnt < Vol.Bpb.BPB_SecPerClus) {
+        sector_read(Vol.fd, FirstSectorofCluster + DirSecCnt, & buffer);
+        DirSecCnt++;
+      /* Reaches the end of the cluster */
+      } else {
+        /* Checks if there isn't a cluster to continue to read*/
+        if (FatClusEntryVal == 0xffff) {
+          log_msg("%s: file not found\n", path[pathDepth]);
+          exit(EXIT_FAILURE);
+
+        /* If there is a cluster to continue reading */
+        } else if (FatClusEntryVal >= 0x0002) {
+          /* Update the cluster number */
+          ClusterN = FatClusEntryVal;
+
+          /* Update the fat entry */
+          FatClusEntryVal = fat_entry_by_cluster(Vol.fd, & Vol, ClusterN);
+
+          /* Calculates the first sector of the cluster */
+          FirstSectorofCluster = ((ClusterN - 2) *Vol.Bpb.BPB_SecPerClus) + Vol.FirstDataSector;
+
+          /* Read it, and then continue */
+          sector_read(Vol.fd, FirstSectorofCluster, & buffer);
+          i = 0;
+          DirSecCnt = 1;
+        }
+      }
+    }
+  }
+  return 1;
+}
 
 DIR_ENTRY *readdir(VOLUME Vol)
 {
@@ -586,9 +583,10 @@ int fat16_getattr(const char *path, struct stat *stbuf)
     stbuf->st_blocks = 0;
     stbuf->st_ctime = stbuf->st_atime = stbuf->st_mtime = 0;
   } else {
-    DIR_ENTRY *file = readdir(*Vol);
+    DIR_ENTRY Dir;
+    int res = find_root(*Vol, &Dir, path, pathSize, 0);
 
-    if (file != NULL) {
+    if (res == 0) {
       if (file->DIR_Attr == 0x10) {
         stbuf->st_mode = S_IFDIR | 0755;
       } else {
