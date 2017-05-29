@@ -508,6 +508,7 @@ void fat16_destroy(void *data)
   log_msg("Chamando destroy\n");
 
   // Your code here
+  free(data);
 }
 
 int fat16_getattr(const char *path, struct stat *stbuf)
@@ -544,14 +545,13 @@ int fat16_getattr(const char *path, struct stat *stbuf)
       } else {
         stbuf->st_mode = S_IFREG | 0644;
       }
+
       stbuf->st_size = Dir.DIR_FileSize;
       stbuf->st_blocks = (stbuf->st_size / stbuf->st_blksize);
 
       /* Implementing the FAT Date/Time attributes */
       struct tm t;
-
       memset((char *) &t, 0, sizeof(struct tm));
-
       t.tm_sec = Dir.DIR_WrtTime & ((1 << 5) - 1);
       t.tm_min = (Dir.DIR_WrtTime >> 5) & ((1 << 6) - 1);
       t.tm_hour = Dir.DIR_WrtTime >> 11;
