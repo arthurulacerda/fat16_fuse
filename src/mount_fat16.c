@@ -12,6 +12,11 @@
 #include "sector.h"
 #include "log.h"
 
+#define BYTES_PER_DIR 32
+
+#define ATTR_DIRECTORY 0x10
+#define ATTR_ARCHIVE 0x20
+
 typedef uint8_t BYTE;
 typedef uint16_t WORD;
 typedef uint32_t DWORD;
@@ -43,7 +48,7 @@ typedef struct {
 } __attribute__ ((packed)) BPB_BS;
 
 typedef struct {
-  char DIR_Name[11];
+  BYTE DIR_Name[11];
   BYTE DIR_Attr;
   BYTE DIR_NTRes;
   BYTE DIR_CrtTimeTenth;
@@ -66,6 +71,26 @@ typedef struct {
 
 int find_root(VOLUME, DIR_ENTRY*, char**, int, int);
 int find_subdir(VOLUME, DIR_ENTRY*, char**, int, int, int);
+
+void printDIR(DIR_ENTRY Dir) {
+  int i;
+  log_msg("Name: ");
+  for (i = 0; i < 11; i++) {
+   log_msg("%c", Dir.DIR_Name[i]);
+  }
+  log_msg("\n");
+  log_msg("Attr: %x\n", Dir.DIR_Attr);
+  log_msg("NTRes: %d\n", Dir.DIR_NTRes);
+  log_msg("CrtTimeTenth: %d\n", Dir.DIR_CrtTimeTenth);
+  log_msg("CrtTime: %d\n", Dir.DIR_CrtTime);
+  log_msg("CrtDate: %d\n", Dir.DIR_CrtDate);
+  log_msg("LstAccDate: %d\n", Dir.DIR_LstAccDate);
+  log_msg("FstClusHI: %d\n", Dir.DIR_FstClusHI);
+  log_msg("WrtTime: %d\n", Dir.DIR_WrtTime);
+  log_msg("WrtDate: %d\n", Dir.DIR_WrtDate);
+  log_msg("FstClusLO: %d\n", Dir.DIR_FstClusLO);
+  log_msg("FileSize: %d\n\n", Dir.DIR_FileSize);
+}
 
 /**
  * Reads BPB, calculates the first sector of the root and data sections.
@@ -127,12 +152,12 @@ VOLUME *pre_init_fat16(void)
  * @CusterN: the Nth cluster of the data section.
 **/
 WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, WORD ClusterN) {
-  BYTE FatBuffer[BYTES_PER_SECTOR];
+  BYTE sector_buffer[BYTES_PER_SECTOR];
   WORD FATOffset = ClusterN * 2;
   WORD FatSecNum = Vol -> Bpb.BPB_RsvdSecCnt + (FATOffset / Vol -> Bpb.BPB_BytsPerSec);
   WORD FatEntOffset = FATOffset % Vol -> Bpb.BPB_BytsPerSec;
-  sector_read(fd, FatSecNum, & FatBuffer);
-  return *((WORD *) & FatBuffer[FatEntOffset]);
+  sector_read(fd, FatSecNum, & sector_buffer);
+  return *((WORD *) & sector_buffer[FatEntOffset]);
 }
 
 /**
@@ -274,8 +299,8 @@ char ** path_treatment(char *pathInput, int *pathSz) {
  * Parameters
  * @path: DIR_Name string
 **/
-char *path_decode(char *path) {
-  char *pathDecoded = malloc(12 * sizeof(char));
+BYTE *path_decode(BYTE *path) {
+  BYTE *pathDecoded = malloc(12 * sizeof(BYTE));
 
   if (pathDecoded == NULL) {
     log_msg("Out of memory!\n");
@@ -344,7 +369,7 @@ int find_root(VOLUME Vol, DIR_ENTRY *Root, char ** path, int pathSize, int pathD
 
   int RootDirCnt = 1, i, j, cmpstring = 1;
   for (i = 1; i <= Vol.Bpb.BPB_RootEntCnt; i++) {
-    memcpy(Root, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+    memcpy(Root, & buffer[((i - 1) * BYTES_PER_DIR) % BYTES_PER_SECTOR], BYTES_PER_DIR);
 
     /* If the directory entry is free, all the next directory entries are also
      * free. So this file/directory could not be found */
@@ -363,19 +388,19 @@ int find_root(VOLUME Vol, DIR_ENTRY *Root, char ** path, int pathSize, int pathD
 
     /* If the path is only one file (ATTR_ARCHIVE) and it is located in the
      * root directory, stop searching */
-    if (cmpstring && Root->DIR_Attr == 0x20) {
+    if (cmpstring && Root->DIR_Attr == ATTR_ARCHIVE) {
       return 0;
     }
 
     /* If the path is only one directory (ATTR_DIRECTORY) and it is located in
      * the root directory, stop searching */
-    if (cmpstring && Root->DIR_Attr == 0x10 && pathSize == pathDepth + 1) {
+    if (cmpstring && Root->DIR_Attr == ATTR_DIRECTORY && pathSize == pathDepth + 1) {
       return 0;
     }
 
     /* If the first level of the path is a directory, continue searching
      * in the root's sub-directories */
-    if (cmpstring && Root->DIR_Attr == 0x10) {
+    if (cmpstring && Root->DIR_Attr == ATTR_DIRECTORY) {
       return find_subdir(Vol, Root, path, pathSize, pathDepth + 1, 1);
     }
 
@@ -424,7 +449,7 @@ int find_subdir(VOLUME Vol, DIR_ENTRY *Dir, char ** path, int pathSize,
   sector_read(Vol.fd, FirstSectorofCluster, & buffer);
 
   for (i = 1; Dir->DIR_Name[0] != 0x00; i++) {
-    memcpy(Dir, & buffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+    memcpy(Dir, & buffer[((i - 1) * BYTES_PER_DIR) % BYTES_PER_SECTOR], BYTES_PER_DIR);
 
     /* Comparing strings */
     cmpstring = 1;
@@ -437,13 +462,13 @@ int find_subdir(VOLUME Vol, DIR_ENTRY *Dir, char ** path, int pathSize,
 
     /* If the last file of the path is located in this
      * directory stop searching */
-    if ((cmpstring && Dir->DIR_Attr == 0x20 && pathDepth + 1 == pathSize) ||
-        (cmpstring && Dir->DIR_Attr == 0x10 && pathDepth + 1 == pathSize)) {
+    if ((cmpstring && Dir->DIR_Attr == ATTR_ARCHIVE && pathDepth + 1 == pathSize) ||
+        (cmpstring && Dir->DIR_Attr == ATTR_DIRECTORY && pathDepth + 1 == pathSize)) {
       return 0;
     }
 
     /* If the directory has been found and it isn't the last file */
-    if (cmpstring && Dir->DIR_Attr == 0x10) {
+    if (cmpstring && Dir->DIR_Attr == ATTR_DIRECTORY) {
 
       /* If the file is .., then the rootDepth decreases and search continues*/
       if (path[pathDepth][0] == '.' && path[pathDepth][1] == '.') {
@@ -523,8 +548,9 @@ int fat16_getattr(const char *path, struct stat *stbuf)
   /* stbuf: setting file/directory attributes */
   memset(stbuf, 0, sizeof(struct stat));
   stbuf->st_dev = Vol->Bpb.BS_VollID;
-  stbuf->st_nlink = 1;
-  stbuf->st_blksize = Vol->Bpb.BPB_SecPerClus * BYTES_PER_SECTOR;
+  stbuf->st_blksize = BYTES_PER_SECTOR * Vol->Bpb.BPB_SecPerClus;
+  stbuf->st_uid = getuid();
+  stbuf->st_gid = getgid();
 
   /* Root directory */
   if (strcmp(path, "/") == 0) {
@@ -539,24 +565,23 @@ int fat16_getattr(const char *path, struct stat *stbuf)
     int res = find_root(*Vol, &Dir, pathFormatted, pathSize, 0);
 
     if (res == 0) {
-      // Unix-like permissions
-      if (Dir.DIR_Attr == 0x10) {
+      /* Unix-like permissions */
+      if (Dir.DIR_Attr == ATTR_DIRECTORY) {
         stbuf->st_mode = S_IFDIR | 0755;
       } else {
         stbuf->st_mode = S_IFREG | 0644;
       }
-
       stbuf->st_size = Dir.DIR_FileSize;
       stbuf->st_blocks = (stbuf->st_size / stbuf->st_blksize);
 
-      /* Implementing the FAT Date/Time attributes */
+      /* Implementing the required FAT Date/Time attributes */
       struct tm t;
       memset((char *) &t, 0, sizeof(struct tm));
       t.tm_sec = Dir.DIR_WrtTime & ((1 << 5) - 1);
       t.tm_min = (Dir.DIR_WrtTime >> 5) & ((1 << 6) - 1);
       t.tm_hour = Dir.DIR_WrtTime >> 11;
       t.tm_mday = (Dir.DIR_WrtDate & ((1 << 5) - 1));
-      t.tm_mon = (Dir.DIR_WrtDate >> 5) & ((1 << 4));
+      t.tm_mon = (Dir.DIR_WrtDate >> 5) & ((1 << 4) - 1);
       t.tm_year = 80 + (Dir.DIR_WrtDate >> 9);
       stbuf->st_ctime = stbuf->st_atime = stbuf->st_mtime = mktime(&t);
     }
@@ -567,56 +592,58 @@ int fat16_getattr(const char *path, struct stat *stbuf)
 int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
                   off_t offset, struct fuse_file_info *fi)
 {
-  (void) offset;
-  (void) fi;
+  log_msg("Calling readdir(%s)\n", path);
   VOLUME *Vol;
+  BYTE sector_buffer[BYTES_PER_SECTOR];
+  int RootDirCnt = 1, DirSecCnt = 1, i;
 
+  sector_read(Vol->fd, Vol->FirstRootDirSecNum, &sector_buffer);
+
+  /* Gets volume data supplied in the context during the fat16_init function */
   struct fuse_context *context;
   context = fuse_get_context();
   Vol = (VOLUME *) context->private_data;
 
   if (strcmp(path, "/") == 0) {
     DIR_ENTRY Root;
-    int RootDirCnt = 1, i;
-
-    /* Buffer to store bytes from sector_read */
-    BYTE fatbuffer[BYTES_PER_SECTOR];
-
-    sector_read(Vol->fd, Vol->FirstRootDirSecNum, &fatbuffer);
 
     /* Starts filling the requested directory entries into the buffer */
     for (i = 1; i <= Vol->Bpb.BPB_RootEntCnt; i++) {
-      memcpy(&Root, &fatbuffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+      memcpy(&Root, &sector_buffer[((i - 1) * BYTES_PER_DIR) % BYTES_PER_SECTOR], BYTES_PER_DIR);
 
+      /* No more files to fill */
       if (Root.DIR_Name[0] == 0x00) {
         return 0;
       }
 
-      if (Root.DIR_Attr == 0x20) {
-        const char *filename = strdup(path_decode(Root.DIR_Name));
+      if (Root.DIR_Attr == ATTR_ARCHIVE) {
+        const char *filename = (const char *) (path_decode(Root.DIR_Name));
         filler(buffer, filename, NULL, 0);
       }
 
-      if (Root.DIR_Attr == 0x10) {
-        const char *filename = strdup(path_decode(Root.DIR_Name));
+      if (Root.DIR_Attr == ATTR_DIRECTORY) {
+        const char *filename = (const char *) (path_decode(Root.DIR_Name));
         filler(buffer, filename, NULL, 0);
       }
 
       /* End of bytes for this sector (1 sector == 512 bytes == 16 DIR entries)
        * Read next sector */
       if (i % 16 == 0 && i != Vol->Bpb.BPB_RootEntCnt) {
-        sector_read(Vol->fd, Vol->FirstRootDirSecNum + RootDirCnt, &fatbuffer);
+        sector_read(Vol->fd, Vol->FirstRootDirSecNum + RootDirCnt, &sector_buffer);
         RootDirCnt++;
       }
     }
   } else {
     DIR_ENTRY Dir;
     int pathSize;
-    char **pathFormatted = path_treatment((char *) path, &pathSize);
-    int res = find_root(*Vol, &Dir, pathFormatted, pathSize, 0);
 
-    int i, DirSecCnt = 1;
-    BYTE fatbuffer[BYTES_PER_SECTOR];
+    /* Formats the given path into the FAT16 format name (field DIR_Name) */
+    char **pathFormatted = path_treatment((char *) path, &pathSize);
+
+    /* First, we find the first corresponding directory entry in the root
+     * directory and store the result in the entry Dir */
+    find_root(*Vol, &Dir, pathFormatted, pathSize, 0);
+    printDIR(Dir);
 
     WORD ClusterN = Dir.DIR_FstClusLO;
     WORD FatClusEntryVal = fat_entry_by_cluster(Vol->fd, Vol, ClusterN);
@@ -624,14 +651,15 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
     /* First sector of any valid cluster */
     WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
 
-    sector_read(Vol->fd, FirstSectorofCluster, &fatbuffer);
+    sector_read(Vol->fd, FirstSectorofCluster, &sector_buffer);
+
     for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
-      memcpy(&Dir, &fatbuffer[((i - 1) * 32) % BYTES_PER_SECTOR], 32);
+      memcpy(&Dir, &sector_buffer[((i - 1) * BYTES_PER_DIR) % BYTES_PER_SECTOR], BYTES_PER_DIR);
 
       /* If the last file of the path is located in this
        * directory stop searching */
-      if (Dir.DIR_Attr == 0x20 || Dir.DIR_Attr == 0x10) {
-        const char *filename = strdup(path_decode(Dir.DIR_Name));
+      if (Dir.DIR_Attr == ATTR_ARCHIVE || Dir.DIR_Attr == ATTR_DIRECTORY) {
+        const char *filename = (const char *) (path_decode(Dir.DIR_Name));
         filler(buffer, filename, NULL, 0);
       }
 
@@ -660,7 +688,7 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
             FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
 
             /* Read it, and then continue */
-            sector_read(Vol->fd, FirstSectorofCluster, &fatbuffer);
+            sector_read(Vol->fd, FirstSectorofCluster, &sector_buffer);
             i = 0;
             DirSecCnt = 1;
           }
@@ -682,18 +710,16 @@ int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
                struct fuse_file_info *fi)
 {
   VOLUME *Vol;
-  int i, DirSecCnt = 1;
   DIR_ENTRY Dir;
-  int pathSize;
+  BYTE sector_buffer[BYTES_PER_SECTOR];
 
   struct fuse_context *context;
   context = fuse_get_context();
   Vol = (VOLUME *) context->private_data;
 
+  int pathSize;
   char **pathFormatted = path_treatment((char *) path, &pathSize);
   int res = find_root(*Vol, &Dir, pathFormatted, pathSize, 0);
-
-  BYTE fatbuffer[BYTES_PER_SECTOR];
 
   WORD ClusterN = Dir.DIR_FstClusLO;
   WORD FatClusEntryVal = fat_entry_by_cluster(Vol->fd, Vol, ClusterN);
@@ -702,7 +728,7 @@ int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
   WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
 
   /* Read bytes from the given path into the buffer */
-  int j;
+  int i, j, DirSecCnt = 1;
   for (i = 0, j = 0; ; i++, j++) {
     sector_read(Vol->fd, FirstSectorofCluster + j, &buffer[BYTES_PER_SECTOR * j]);
 
@@ -724,6 +750,8 @@ int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
       j = -1;
     }
   }
+  //memcpy(buffer, tmpbuf, size);
+  log_msg("Calling read: %d\n", size);
   return size;
 }
 
