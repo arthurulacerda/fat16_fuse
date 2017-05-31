@@ -196,12 +196,12 @@ char **path_treatment(char *pathInput, int *pathSz) {
     exit(EXIT_FAILURE);
   }
 
-  const char token[2] = "/";
+  const char token[] = "/";
   char *slice;
 
   i = 0;
 
-  /* Dividing path into separated strings of file names */
+  /* Dividing the path into separated strings of file names */
   slice = strtok(pathInput, token);
   while (i < pathSize) {
     path[i++] = slice;
@@ -216,20 +216,20 @@ char **path_treatment(char *pathInput, int *pathSz) {
   }
 
   for (i = 0; i < pathSize; i++) {
-    pathFormatted[i] = (char *) malloc(11 * sizeof(char));
+    pathFormatted[i] = (char *) malloc(12 * sizeof(char));
   }
 
   int k;
   int dotFlag = 0;
 
-  /* Verifyies if each file of the path is valid input, and formats it for FAT16 */
+  /* Verifies if each file of the path is a valid input, and then formats it */
   for (i = 0; i < pathSize; i++) {
-    for (j = 0, k = 0;; j++, k++) {
+    for (j = 0, k = 0; ; j++, k++) {
 
-      /* When an '.' character is analysed */
+      /* When a '.' character is analysed */
       if (path[i][j] == '.') {
 
-        /* Verifies if it's . file */
+        /* Verifies if it's a '.' (dot entry) */
         if (j == 0 && path[i][j + 1] == '\0') {
           pathFormatted[i][0] = '.';
           for (k = 1; k < 11; k++) {
@@ -238,7 +238,7 @@ char **path_treatment(char *pathInput, int *pathSz) {
           break;
         }
 
-        /* Verifies if it's .. file */
+        /* Verifies if it's a ".." (dotdot entry) */
         if (j == 0 && path[i][j + 1] == '.' && path[i][j + 2] == '\0') {
           pathFormatted[i][0] = '.';
           pathFormatted[i][1] = '.';
@@ -549,8 +549,8 @@ int fat16_getattr(const char *path, struct stat *stbuf)
   memset(stbuf, 0, sizeof(struct stat));
   stbuf->st_dev = Vol->Bpb.BS_VollID;
   stbuf->st_blksize = BYTES_PER_SECTOR * Vol->Bpb.BPB_SecPerClus;
-  stbuf->st_uid = getuid();
-  stbuf->st_gid = getgid();
+  //stbuf->st_uid = 0;
+  //stbuf->st_gid = getgid();
 
   /* Root directory attributes */
   if (strcmp(path, "/") == 0) {
@@ -565,14 +565,14 @@ int fat16_getattr(const char *path, struct stat *stbuf)
     int res = find_root(*Vol, &Dir, pathFormatted, pathSize, 0);
 
     if (res == 0) {
-      /* Unix-like permissions */
+      /* FAT-like permissions */
       if (Dir.DIR_Attr == ATTR_DIRECTORY) {
         stbuf->st_mode = S_IFDIR | 0755;
       } else {
-        stbuf->st_mode = S_IFREG | 0644;
+        stbuf->st_mode = S_IFREG | 0755;
       }
       stbuf->st_size = Dir.DIR_FileSize;
-      stbuf->st_blocks = (stbuf->st_size / stbuf->st_blksize);
+      stbuf->st_blocks = (stbuf->st_size / stbuf->st_blksize) + 1;
 
       /* Implementing the required FAT Date/Time attributes */
       struct tm t;
@@ -708,9 +708,10 @@ int fat16_open(const char *path, struct fuse_file_info *fi)
 int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
                struct fuse_file_info *fi)
 {
+  log_msg("Calling read size: %d\noffset: %d\n", size, offset);
   VOLUME *Vol;
   DIR_ENTRY Dir;
-  BYTE sector_buffer[BYTES_PER_SECTOR];
+  BYTE sector_buffer[size];
 
   /* Gets volume data supplied in the context during the fat16_init function */
   struct fuse_context *context;
@@ -728,9 +729,9 @@ int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
   WORD FirstSectorofCluster = ((ClusterN - 2) * Vol->Bpb.BPB_SecPerClus) + Vol->FirstDataSector;
 
   /* Read bytes from the given path into the buffer */
-  int i, j, DirSecCnt = 1;
-  for (i = 0, j = 0; ; i++, j++) {
-    sector_read(Vol->fd, FirstSectorofCluster + j, &buffer[BYTES_PER_SECTOR * j]);
+  int i, j;
+  for (i = 0, j = 0; i < size / BYTES_PER_SECTOR; i++, j++) {
+    sector_read(Vol->fd, FirstSectorofCluster + j, &sector_buffer[BYTES_PER_SECTOR * i]);
 
     if ((j + 1) % Vol->Bpb.BPB_SecPerClus == 0) {
       /* If this is the last cluster of the file, stop reading */
@@ -750,8 +751,7 @@ int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
       j = -1;
     }
   }
-  //memcpy(buffer, tmpbuf, size);
-  log_msg("Calling read: %d\n", size);
+  memcpy(buffer, sector_buffer, size);
   return size;
 }
 
