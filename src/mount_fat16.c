@@ -21,7 +21,7 @@ typedef uint8_t BYTE;
 typedef uint16_t WORD;
 typedef uint32_t DWORD;
 
-/* FAT16 Volume Structure */
+/* FAT16 BPB Structure */
 typedef struct {
   BYTE BS_jmpBoot[3];
   BYTE BS_OEMName[8];
@@ -47,6 +47,7 @@ typedef struct {
   WORD Signature_word;
 } __attribute__ ((packed)) BPB_BS;
 
+/* FAT Directory Structure */
 typedef struct {
   BYTE DIR_Name[11];
   BYTE DIR_Attr;
@@ -62,6 +63,7 @@ typedef struct {
   DWORD DIR_FileSize;
 } __attribute__ ((packed)) DIR_ENTRY;
 
+/* FAT16 volume data with a file handler of the FAT16 image file */
 typedef struct {
   FILE *fd;
   DWORD FirstRootDirSecNum;
@@ -69,6 +71,7 @@ typedef struct {
   BPB_BS Bpb;
 } VOLUME;
 
+/* Prototypes (documentation in the functions' definitions below) */
 int find_root(VOLUME, DIR_ENTRY*, char**, int, int);
 int find_subdir(VOLUME, DIR_ENTRY*, char**, int, int, int);
 
@@ -140,7 +143,7 @@ VOLUME *pre_init_fat16(void)
 }
 
 /**
- * Given an cluster N, the function gets the FAT entry.
+ * Given a cluster N, this function gets its FAT entry.
  * ==================================================================================
  * Return
  * There is no return in this funcion.
@@ -161,18 +164,18 @@ WORD fat_entry_by_cluster(FILE *fd, VOLUME *Vol, WORD ClusterN) {
 }
 
 /**
- * This function recieves the string given by user input and divides it into an array
- * of strings, with the format of FAT16.
+ * This function receieves the string given by user input and divides it into an array
+ * of strings, with the format of a FAT file/directory name.
  * ==================================================================================
  * Return
- * @pathFormatted: array of string, each strings references a file of the path, in a
- * given depth, it also presents the format of FAT16 file names.
+ * @pathFormatted: array of string, each string references a file of the path, in a
+ * given depth. It also presents the format of FAT file names.
  * ==================================================================================
  * Parameters
  * @pathInput: User input string, the path of files to go trough.
  * @pathSz: Address of the variable that will keep the number of files in the path.
 **/
-char ** path_treatment(char *pathInput, int *pathSz) {
+char **path_treatment(char *pathInput, int *pathSz) {
   int pathSize = 1;
   int i, j;
   char letter = '0';
@@ -186,7 +189,7 @@ char ** path_treatment(char *pathInput, int *pathSz) {
     }
   }
 
-  char ** path = (char ** ) malloc(pathSize * sizeof(char *));
+  char **path = (char **) malloc(pathSize * sizeof(char *));
 
   if (path == NULL) {
     log_msg("Out of memory!\n");
@@ -205,7 +208,7 @@ char ** path_treatment(char *pathInput, int *pathSz) {
     slice = strtok(NULL, token);
   }
 
-  char ** pathFormatted = (char ** ) malloc(pathSize * sizeof(char *));
+  char ** pathFormatted = (char **) malloc(pathSize * sizeof(char *));
 
   if (pathFormatted == NULL) {
     log_msg("Out of memory!\n");
@@ -283,23 +286,22 @@ char ** path_treatment(char *pathInput, int *pathSz) {
     }
   }
 
-
   *pathSz = pathSize;
   free(path);
   return pathFormatted;
 }
 
 /**
- * This function recieves the FAT16 stored string (DIR_Name) and decodes it to
- * its original name.
+ * This function receieves a FAT file/directory name (DIR_Name) and decodes it
+ * to its original user input name.
  * ==================================================================================
  * Return
  * @pathDecoded: decoded string
  * ==================================================================================
  * Parameters
- * @path: DIR_Name string
+ * @dir_name: DIR_Name string
 **/
-BYTE *path_decode(BYTE *path) {
+BYTE *path_decode(BYTE *dir_name) {
   BYTE *pathDecoded = malloc(12 * sizeof(BYTE));
 
   if (pathDecoded == NULL) {
@@ -309,14 +311,14 @@ BYTE *path_decode(BYTE *path) {
 
   int i, j = 0;
 
-  /* If the path consists of "." or "..", return them as the decoded path */
-  if (path[0] == '.' && path[1] == '.') {
+  /* If the name consists of "." or "..", return them as the decoded path */
+  if (dir_name[0] == '.' && dir_name[1] == '.') {
     pathDecoded[j++] = '.';
     pathDecoded[j++] = '.';
     pathDecoded[j] = '\0';
     return pathDecoded;
   }
-  if (path[0] == '.') {
+  if (dir_name[0] == '.') {
     pathDecoded[j++] = '.';
     pathDecoded[j] = '\0';
     return pathDecoded;
@@ -324,20 +326,20 @@ BYTE *path_decode(BYTE *path) {
 
   /* Decoding from uppercase letters to lowercase letters, removing spaces and
    * inserting 'dots' in between them */
-  for (i = 0; path[i + 1] != '\0'; i++) {
-    if (path[i] != ' ') {
+  for (i = 0; dir_name[i + 1] != '\0'; i++) {
+    if (dir_name[i] != ' ') {
       if (i != 8) {
-        if (path[i] >= 65 && path[i] <= 100) {
-          pathDecoded[j++] = path[i] + 32;
+        if (dir_name[i] >= 65 && dir_name[i] <= 100) {
+          pathDecoded[j++] = dir_name[i] + 32;
         } else {
-          pathDecoded[j++] = path[i];
+          pathDecoded[j++] = dir_name[i];
         }
       } else {
         pathDecoded[j++] = '.';
-        if (path[i] >= 65 && path[i] <= 100) {
-          pathDecoded[j++] = path[i] + 32;
+        if (dir_name[i] >= 65 && dir_name[i] <= 100) {
+          pathDecoded[j++] = dir_name[i] + 32;
         } else {
-          pathDecoded[j++] = path[i];
+          pathDecoded[j++] = dir_name[i];
         }
       }
     }
@@ -521,7 +523,6 @@ void *fat16_init(struct fuse_conn_info *conn)
 {
   log_msg("Chamando init\n");
 
-  // Your code here
   struct fuse_context *context;
   context = fuse_get_context();
 
@@ -532,15 +533,14 @@ void fat16_destroy(void *data)
 {
   log_msg("Chamando destroy\n");
 
-  // Your code here
   free(data);
 }
 
 int fat16_getattr(const char *path, struct stat *stbuf)
 {
-
   VOLUME *Vol;
 
+  /* Gets volume data supplied in the context during the fat16_init function */
   struct fuse_context *context;
   context = fuse_get_context();
   Vol = (VOLUME *) context->private_data;
@@ -552,7 +552,7 @@ int fat16_getattr(const char *path, struct stat *stbuf)
   stbuf->st_uid = getuid();
   stbuf->st_gid = getgid();
 
-  /* Root directory */
+  /* Root directory attributes */
   if (strcmp(path, "/") == 0) {
     stbuf->st_mode = S_IFDIR | S_IRWXU;
     stbuf->st_size = 0;
@@ -597,12 +597,12 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
   BYTE sector_buffer[BYTES_PER_SECTOR];
   int RootDirCnt = 1, DirSecCnt = 1, i;
 
-  sector_read(Vol->fd, Vol->FirstRootDirSecNum, &sector_buffer);
-
   /* Gets volume data supplied in the context during the fat16_init function */
   struct fuse_context *context;
   context = fuse_get_context();
   Vol = (VOLUME *) context->private_data;
+
+  sector_read(Vol->fd, Vol->FirstRootDirSecNum, &sector_buffer);
 
   if (strcmp(path, "/") == 0) {
     DIR_ENTRY Root;
@@ -616,12 +616,9 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
         return 0;
       }
 
-      if (Root.DIR_Attr == ATTR_ARCHIVE) {
-        const char *filename = (const char *) (path_decode(Root.DIR_Name));
-        filler(buffer, filename, NULL, 0);
-      }
-
-      if (Root.DIR_Attr == ATTR_DIRECTORY) {
+      /* If we found a file or a directory, fill it into the buffer */
+      if (Root.DIR_Attr == ATTR_ARCHIVE || Root.DIR_Attr == ATTR_DIRECTORY) {
+        /* Decodes the encoded FAT name file/directory name */
         const char *filename = (const char *) (path_decode(Root.DIR_Name));
         filler(buffer, filename, NULL, 0);
       }
@@ -637,14 +634,15 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
     DIR_ENTRY Dir;
     int pathSize;
 
-    /* Formats the given path into the FAT16 format name (field DIR_Name) */
+    /* Formats the given path into the FAT format name */
     char **pathFormatted = path_treatment((char *) path, &pathSize);
 
     /* First, we find the first corresponding directory entry in the root
-     * directory and store the result in the entry Dir */
+     * directory and store the result in the directory entry Dir */
     find_root(*Vol, &Dir, pathFormatted, pathSize, 0);
     printDIR(Dir);
 
+    /* Gets the FAT entry for the first cluster of this directory entry Dir */
     WORD ClusterN = Dir.DIR_FstClusLO;
     WORD FatClusEntryVal = fat_entry_by_cluster(Vol->fd, Vol, ClusterN);
 
@@ -655,6 +653,7 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
 
     for (i = 1; Dir.DIR_Name[0] != 0x00; i++) {
       memcpy(&Dir, &sector_buffer[((i - 1) * BYTES_PER_DIR) % BYTES_PER_SECTOR], BYTES_PER_DIR);
+      printDIR(Dir);
 
       /* If the last file of the path is located in this
        * directory stop searching */
@@ -668,7 +667,7 @@ int fat16_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
 
         /* If there are still sector to be readen in the cluster, read the next sector. */
         if (DirSecCnt < Vol->Bpb.BPB_SecPerClus) {
-          sector_read(Vol->fd, FirstSectorofCluster + DirSecCnt, & buffer);
+          sector_read(Vol->fd, FirstSectorofCluster + DirSecCnt, &sector_buffer);
           DirSecCnt++;
         /* Reaches the end of the cluster */
         } else {
@@ -713,6 +712,7 @@ int fat16_read(const char *path, char *buffer, size_t size, off_t offset,
   DIR_ENTRY Dir;
   BYTE sector_buffer[BYTES_PER_SECTOR];
 
+  /* Gets volume data supplied in the context during the fat16_init function */
   struct fuse_context *context;
   context = fuse_get_context();
   Vol = (VOLUME *) context->private_data;
