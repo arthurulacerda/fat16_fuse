@@ -208,7 +208,7 @@ char **path_treatment(char *pathInput, int *pathSz) {
     slice = strtok(NULL, token);
   }
 
-  char ** pathFormatted = (char **) malloc(pathSize * sizeof(char *));
+  char **pathFormatted = (char **) malloc(pathSize * sizeof(char *));
 
   if (pathFormatted == NULL) {
     log_msg("Out of memory!\n");
@@ -216,7 +216,12 @@ char **path_treatment(char *pathInput, int *pathSz) {
   }
 
   for (i = 0; i < pathSize; i++) {
-    pathFormatted[i] = (char *) malloc(12 * sizeof(char));
+    pathFormatted[i] = (char *) malloc(11 * sizeof(char));
+
+    if (pathFormatted[i] == NULL) {
+      log_msg("Out of memory!\n");
+      exit(EXIT_FAILURE);
+    }
   }
 
   int k;
@@ -226,22 +231,24 @@ char **path_treatment(char *pathInput, int *pathSz) {
   for (i = 0; i < pathSize; i++) {
     for (j = 0, k = 0; ; j++, k++) {
 
-      /* When a '.' character is analysed */
+      /* Here, a '.' (dot) character is analysed */
       if (path[i][j] == '.') {
 
-        /* Verifies if it's a '.' (dot entry) */
+        /* Verifies if it is a "./" (dot entry) */
         if (j == 0 && path[i][j + 1] == '\0') {
           pathFormatted[i][0] = '.';
+
           for (k = 1; k < 11; k++) {
             pathFormatted[i][k] = ' ';
           }
           break;
         }
 
-        /* Verifies if it's a ".." (dotdot entry) */
+        /* Verifies if it's a "../" (dotdot entry) */
         if (j == 0 && path[i][j + 1] == '.' && path[i][j + 2] == '\0') {
           pathFormatted[i][0] = '.';
           pathFormatted[i][1] = '.';
+
           for (k = 2; k < 11; k++) {
             pathFormatted[i][k] = ' ';
           }
@@ -267,7 +274,6 @@ char **path_treatment(char *pathInput, int *pathSz) {
         for (; k < 11; k++) {
           pathFormatted[i][k] = ' ';
         }
-
         break;
       }
 
@@ -276,14 +282,17 @@ char **path_treatment(char *pathInput, int *pathSz) {
         pathFormatted[i][k] = path[i][j] - 32;
       }
       /* Other character accepted in the file name*/
-      else if ((path[i][j] >= 'A' && path[i][j] <= 'Z') || (path[i][j] >= '0' && path[i][j] <= '9') ||
-        path[i][j] == '$' || path[i][j] == '%' || path[i][j] == '\'' || path[i][j] == '-' || path[i][j] == '_' ||
-        path[i][j] == '@' || path[i][j] == '~' || path[i][j] == '`' || path[i][j] == '!' || path[i][j] == '(' ||
-        path[i][j] == ')' || path[i][j] == '{' || path[i][j] == '}' || path[i][j] == '^' || path[i][j] == '#' ||
-        path[i][j] == '&') {
+      else if ((path[i][j] >= 'A' && path[i][j] <= 'Z') || (path[i][j] >= '0' &&
+                path[i][j] <= '9') || path[i][j] == '$' || path[i][j] == '%' ||
+                path[i][j] == '\'' || path[i][j] == '-' || path[i][j] == '_' ||
+                path[i][j] == '@' || path[i][j] == '~' || path[i][j] == '`' ||
+                path[i][j] == '!' || path[i][j] == '(' || path[i][j] == ')' ||
+                path[i][j] == '{' || path[i][j] == '}' || path[i][j] == '^' ||
+                path[i][j] == '#' || path[i][j] == '&') {
         pathFormatted[i][k] = path[i][j];
       }
     }
+    pathFormatted[i][11] = '\0';
   }
 
   *pathSz = pathSize;
@@ -301,7 +310,7 @@ char **path_treatment(char *pathInput, int *pathSz) {
  * Parameters
  * @dir_name: DIR_Name string
 **/
-BYTE *path_decode(BYTE *dir_name) {
+BYTE *path_decode(BYTE *path) {
   BYTE *pathDecoded = malloc(12 * sizeof(BYTE));
 
   if (pathDecoded == NULL) {
@@ -312,13 +321,13 @@ BYTE *path_decode(BYTE *dir_name) {
   int i, j = 0;
 
   /* If the name consists of "." or "..", return them as the decoded path */
-  if (dir_name[0] == '.' && dir_name[1] == '.') {
+  if (path[0] == '.' && path[1] == '.') {
     pathDecoded[j++] = '.';
     pathDecoded[j++] = '.';
     pathDecoded[j] = '\0';
     return pathDecoded;
   }
-  if (dir_name[0] == '.') {
+  if (path[0] == '.') {
     pathDecoded[j++] = '.';
     pathDecoded[j] = '\0';
     return pathDecoded;
@@ -326,20 +335,30 @@ BYTE *path_decode(BYTE *dir_name) {
 
   /* Decoding from uppercase letters to lowercase letters, removing spaces and
    * inserting 'dots' in between them */
-  for (i = 0; dir_name[i + 1] != '\0'; i++) {
-    if (dir_name[i] != ' ') {
+  for (i = 0; path[i + 1] != '\0'; i++) {
+    if (path[i] != ' ') {
       if (i != 8) {
-        if (dir_name[i] >= 65 && dir_name[i] <= 100) {
-          pathDecoded[j++] = dir_name[i] + 32;
+        if ((path[i] >= '0' && path[i] <= '9') || path[i] == '$' ||
+            path[i] == '%' || path[i] == '\'' || path[i] == '-' ||
+            path[i] == '_' || path[i] == '@' || path[i] == '~' ||
+            path[i] == '`' || path[i] == '!' || path[i] == '(' ||
+            path[i] == ')' || path[i] == '{' || path[i] == '}' ||
+            path[i] == '^' || path[i] == '#' || path[i] == '&') {
+          pathDecoded[j++] = path[i];
         } else {
-          pathDecoded[j++] = dir_name[i];
+          pathDecoded[j++] = path[i] + 32;
         }
       } else {
         pathDecoded[j++] = '.';
-        if (dir_name[i] >= 65 && dir_name[i] <= 100) {
-          pathDecoded[j++] = dir_name[i] + 32;
+        if ((path[i] >= '0' && path[i] <= '9') || path[i] == '$' ||
+            path[i] == '%' || path[i] == '\'' || path[i] == '-' ||
+            path[i] == '_' || path[i] == '@' || path[i] == '~' ||
+            path[i] == '`' || path[i] == '!' || path[i] == '(' ||
+            path[i] == ')' || path[i] == '{' || path[i] == '}' ||
+            path[i] == '^' || path[i] == '#' || path[i] == '&') {
+          pathDecoded[j++] = path[i];
         } else {
-          pathDecoded[j++] = dir_name[i];
+          pathDecoded[j++] = path[i] + 32;
         }
       }
     }
