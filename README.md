@@ -3,4 +3,5 @@
 
 ### Usage
 `make` to compile
+
 `./mount_fat16 <directory> -s` to execute
